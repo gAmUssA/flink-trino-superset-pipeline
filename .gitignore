@@ -67,3 +67,6 @@ logs/
 data/
 tmp/
 temp/
+
+# History files
+.history/

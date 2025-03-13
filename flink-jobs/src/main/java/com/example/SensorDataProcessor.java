@@ -71,8 +71,8 @@ public class SensorDataProcessor {
                     Double longitude = locationNode.get("lon").asDouble();
                     String facility = locationNode.get("facility").asText();
                     
-                    // Extract sensor value
-                    Double sensorValue = jsonNode.get("value").asDouble();
+                    // Extract sensor value - changed from 'value' to 'reading' to match the data generator
+                    Double sensorValue = jsonNode.get("reading").asDouble();
                     
                     return new Tuple7<>(sensorId, sensorType, timestampStr, latitude, longitude, facility, sensorValue);
                 }

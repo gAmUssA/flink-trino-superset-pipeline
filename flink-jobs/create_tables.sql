@@ -5,7 +5,7 @@ CREATE SCHEMA IF NOT EXISTS iceberg.warehouse;
 CREATE TABLE IF NOT EXISTS iceberg.warehouse.user_activity (
     user_id VARCHAR,
     event_type VARCHAR,
-    event_time TIMESTAMP,
+    event_time TIMESTAMP(6),
     session_id VARCHAR,
     ip_address VARCHAR,
     user_agent VARCHAR,
@@ -21,7 +21,7 @@ WITH (
 CREATE TABLE IF NOT EXISTS iceberg.warehouse.sensor_data (
     sensor_id VARCHAR,
     sensor_type VARCHAR,
-    event_time TIMESTAMP,
+    event_time TIMESTAMP(6),
     latitude DOUBLE,
     longitude DOUBLE,
     facility VARCHAR,

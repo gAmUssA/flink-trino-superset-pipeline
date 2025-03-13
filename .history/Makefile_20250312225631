@@ -1,0 +1,84 @@
+# 🚀 Flink-Trino-Superset Pipeline Makefile
+
+# 🎨 Colors for better readability
+BOLD := \033[1m
+GREEN := \033[32m
+YELLOW := \033[33m
+BLUE := \033[34m
+MAGENTA := \033[35m
+CYAN := \033[36m
+RESET := \033[0m
+
+# 📋 Default target
+.PHONY: help
+help:
+	@echo "$(BOLD)$(CYAN)🚀 Flink-Trino-Superset Pipeline$(RESET)"
+	@echo "$(BOLD)$(GREEN)Available targets:$(RESET)"
+	@echo "  $(YELLOW)help$(RESET)              - Show this help message"
+	@echo "  $(YELLOW)build$(RESET)             - Build all components"
+	@echo "  $(YELLOW)up$(RESET)                - Start all services"
+	@echo "  $(YELLOW)down$(RESET)              - Stop all services"
+	@echo "  $(YELLOW)clean$(RESET)             - Clean up build artifacts"
+	@echo "  $(YELLOW)logs$(RESET)              - Show logs from all services"
+	@echo "  $(YELLOW)build-flink-jobs$(RESET)  - Build Flink jobs"
+	@echo "  $(YELLOW)deploy-flink-jobs$(RESET) - Deploy Flink jobs to the cluster"
+	@echo "  $(YELLOW)create-tables$(RESET)     - Create Iceberg tables in Trino"
+	@echo "  $(YELLOW)setup-superset$(RESET)    - Set up Superset dashboards"
+
+# 🏗️ Build all components
+.PHONY: build
+build: build-flink-jobs
+	@echo "$(BOLD)$(GREEN)🏗️ Building all components...$(RESET)"
+
+# 🚀 Start all services
+.PHONY: up
+up:
+	@echo "$(BOLD)$(GREEN)🚀 Starting all services...$(RESET)"
+	docker-compose up -d
+
+# 🛑 Stop all services
+.PHONY: down
+down:
+	@echo "$(BOLD)$(GREEN)🛑 Stopping all services...$(RESET)"
+	docker-compose down
+
+# 🧹 Clean up build artifacts
+.PHONY: clean
+clean:
+	@echo "$(BOLD)$(GREEN)🧹 Cleaning up build artifacts...$(RESET)"
+	cd flink-jobs && ./gradlew clean
+	rm -rf flink-jobs/build
+
+# 📋 Show logs from all services
+.PHONY: logs
+logs:
+	@echo "$(BOLD)$(GREEN)📋 Showing logs from all services...$(RESET)"
+	docker-compose logs -f
+
+# 🏗️ Build Flink jobs
+.PHONY: build-flink-jobs
+build-flink-jobs:
+	@echo "$(BOLD)$(GREEN)🏗️ Building Flink jobs...$(RESET)"
+	cd flink-jobs && ./gradlew buildAllJars
+
+# 🚀 Deploy Flink jobs to the cluster
+.PHONY: deploy-flink-jobs
+deploy-flink-jobs: build-flink-jobs
+	@echo "$(BOLD)$(GREEN)🚀 Deploying Flink jobs to the cluster...$(RESET)"
+	docker cp flink-jobs/build/libs/user-activity-processor-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
+	docker cp flink-jobs/build/libs/sensor-data-processor-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
+	docker exec -it flink-jobmanager flink run -c com.example.UserActivityProcessor /opt/flink/usrlib/user-activity-processor-1.0-SNAPSHOT.jar
+	docker exec -it flink-jobmanager flink run -c com.example.SensorDataProcessor /opt/flink/usrlib/sensor-data-processor-1.0-SNAPSHOT.jar
+
+# 📊 Create Iceberg tables in Trino
+.PHONY: create-tables
+create-tables:
+	@echo "$(BOLD)$(GREEN)📊 Creating Iceberg tables in Trino...$(RESET)"
+	docker cp flink-jobs/create_tables.sql trino-coordinator:/tmp/
+	docker exec -it trino-coordinator trino --server localhost:8080 --catalog iceberg -f /tmp/create_tables.sql
+
+# 📈 Set up Superset dashboards
+.PHONY: setup-superset
+setup-superset:
+	@echo "$(BOLD)$(GREEN)📈 Setting up Superset dashboards...$(RESET)"
+	@echo "$(YELLOW)Please access Superset at http://localhost:8088 and log in with admin/admin$(RESET)"

@@ -1,0 +1,257 @@
+services:
+  # Kafka - Message broker for data ingestion in KRaft mode
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093,PLAINTEXT_HOST://0.0.0.0:29092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - pipeline-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "nc -z localhost 9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Kafka UI - Web interface for Kafka management
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    networks:
+      - pipeline-network
+
+  # Minio - S3-compatible storage for Iceberg data
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - pipeline-network
+
+  # Create buckets in Minio
+  mc-setup:
+    image: minio/mc:latest
+    container_name: mc-setup
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add myminio http://minio:9000 minioadmin minioadmin) do echo '...waiting for minio...' && sleep 1; done;
+      /usr/bin/mc rm -r --force myminio/warehouse || true;
+      /usr/bin/mc mb myminio/warehouse;
+      /usr/bin/mc policy set public myminio/warehouse;
+      exit 0;
+      "
+    networks:
+      - pipeline-network
+
+  # Flink JobManager - Manages Flink jobs
+  flink-jobmanager:
+    image: flink:1.20.0-java17
+    container_name: flink-jobmanager
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        state.backend: filesystem
+        state.checkpoints.dir: file:///opt/flink/checkpoints
+        heartbeat.interval: 1000
+        heartbeat.timeout: 5000
+        rest.flamegraph.enabled: true
+        web.upload.dir: /opt/flink/usrlib
+        classloader.resolve-order: parent-first
+    volumes:
+      - flink-checkpoints:/opt/flink/checkpoints
+      - ./flink-jobs:/opt/flink/usrlib
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/overview"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - pipeline-network
+
+  # Flink TaskManager - Executes Flink tasks
+  flink-taskmanager:
+    image: flink:1.20.0-java17
+    container_name: flink-taskmanager
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 4
+        state.backend: filesystem
+        state.checkpoints.dir: file:///opt/flink/checkpoints
+        heartbeat.interval: 1000
+        heartbeat.timeout: 5000
+        classloader.resolve-order: parent-first
+    volumes:
+      - flink-checkpoints:/opt/flink/checkpoints
+      - ./flink-jobs:/opt/flink/usrlib
+    networks:
+      - pipeline-network
+
+  # MySQL for Trino metadata
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: trino
+      MYSQL_PASSWORD: trino
+      MYSQL_DATABASE: trino
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - pipeline-network
+
+  # Iceberg REST Catalog - Metadata service for Iceberg tables
+  iceberg-rest:
+    image: tabulario/iceberg-rest
+    container_name: iceberg-rest
+    ports:
+      - "8181:8181"
+    environment:
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_REGION=us-east-1
+      - CATALOG_WAREHOUSE=s3://warehouse/
+      - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
+      - CATALOG_S3_ENDPOINT=http://minio:9000
+    networks:
+      - pipeline-network
+    depends_on:
+      - minio
+
+  # Trino Coordinator - SQL query engine
+  trino-coordinator:
+    image: trinodb/trino:410
+    container_name: trino-coordinator
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./trino/etc:/etc/trino
+    environment:
+      - TRINO_USER=admin
+      - TRINO_PASSWORD=admin
+    networks:
+      - pipeline-network
+    depends_on:
+      - iceberg-rest
+      - minio
+
+  # Superset - Data visualization
+  superset:
+    image: apache/superset:latest
+    container_name: superset
+    ports:
+      - "8088:8088"
+    environment:
+      - ADMIN_USERNAME=admin
+      - ADMIN_EMAIL=admin@superset.com
+      - ADMIN_PASSWORD=admin
+    volumes:
+      - superset-data:/app/superset_home
+    networks:
+      - pipeline-network
+
+  # Superset initialization
+  superset-init:
+    image: apache/superset:latest
+    container_name: superset-init
+    depends_on:
+      - superset
+    environment:
+      - ADMIN_USERNAME=admin
+      - ADMIN_EMAIL=admin@superset.com
+      - ADMIN_PASSWORD=admin
+    command: >
+      bash -c "
+      superset fab create-admin --username admin --firstname Superset --lastname Admin --email admin@superset.com --password admin &&
+      superset db upgrade &&
+      superset init &&
+      superset set-database-uri -d trino -u trino://admin@trino-coordinator:8080/iceberg/warehouse
+      "
+    volumes:
+      - superset-data:/app/superset_home
+    networks:
+      - pipeline-network
+
+  # Data generator - Produces sample data to Kafka
+  data-generator:
+    build:
+      context: ./data-generator
+      dockerfile: Dockerfile
+    container_name: data-generator
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_USER_ACTIVITY_TOPIC: user-activity
+      KAFKA_SENSOR_DATA_TOPIC: sensor-data
+    restart: on-failure
+    networks:
+      - pipeline-network
+
+networks:
+  pipeline-network:
+    driver: bridge
+
+volumes:
+  kafka-data:
+  mysql-data:
+  minio-data:
+  superset-data:
+  flink-checkpoints:

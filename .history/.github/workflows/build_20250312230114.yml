@@ -1,0 +1,42 @@
+name: 🚀 Build and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: 🔧 Set up JDK 21
+      uses: actions/setup-java@v3
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        
+    - name: 🔧 Set up Gradle
+      uses: gradle/gradle-build-action@v2
+      
+    - name: 🏗️ Build Flink jobs
+      run: make build-flink-jobs
+      
+    - name: 🧪 Run tests
+      run: cd flink-jobs && ./gradlew test
+      
+    - name: 🚀 Start services for smoke test
+      run: make up
+      
+    - name: 🔍 Run smoke test
+      run: make smoketest
+      
+    - name: 📦 Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: flink-jobs
+        path: |
+          flink-jobs/build/libs/*.jar

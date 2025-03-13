@@ -1,0 +1,969 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+================================================================
+File Summary
+================================================================
+
+Purpose:
+--------
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+
+File Format:
+------------
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Multiple file entries, each consisting of:
+  a. A separator line (================)
+  b. The file path (File: path/to/file)
+  c. Another separator line
+  d. The full contents of the file
+  e. A blank line
+
+Usage Guidelines:
+-----------------
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+
+Notes:
+------
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+
+Additional Info:
+----------------
+
+================================================================
+Directory Structure
+================================================================
+flink/
+  sql-client/
+    Dockerfile
+    flink-conf.yaml
+  sql-jobs/
+    clickstream-filtering.sql
+producer/
+  Dockerfile
+  producer.py
+  requirements.txt
+superset/
+  Dockerfile
+  superset_config.py
+  superset-init.sh
+trino/
+  iceberg.properties
+docker-compose.yaml
+LICENSE
+README.md
+
+================================================================
+Files
+================================================================
+
+================
+File: flink/sql-client/Dockerfile
+================
+FROM flink:1.18.1-scala_2.12-java11
+
+RUN curl -o ${FLINK_HOME}/lib/flink-sql-connector-kafka-3.1.0-1.18.jar https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.1.0-1.18/flink-sql-connector-kafka-3.1.0-1.18.jar && \
+    curl -o ${FLINK_HOME}/lib/flink-json-1.18.1.jar https://repo.maven.apache.org/maven2/org/apache/flink/flink-json/1.18.1/flink-json-1.18.1.jar && \
+    curl -o ${FLINK_HOME}/lib/iceberg-flink-runtime-1.18-1.5.0.jar https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.18/1.5.0/iceberg-flink-runtime-1.18-1.5.0.jar && \
+    curl -o ${FLINK_HOME}/lib/hadoop-common-2.8.3.jar https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-common/2.8.3/hadoop-common-2.8.3.jar && \
+    curl -o ${FLINK_HOME}/lib/hadoop-hdfs-2.8.3.jar https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-hdfs/2.8.3/hadoop-hdfs-2.8.3.jar && \
+    curl -o ${FLINK_HOME}/lib/hadoop-client-2.8.3.jar https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-client/2.8.3/hadoop-client-2.8.3.jar && \
+    curl -o ${FLINK_HOME}/lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar https://repo.maven.apache.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.8.3-10.0/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar && \
+    curl -o ${FLINK_HOME}/lib/bundle-2.20.18.jar https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.20.18/bundle-2.20.18.jar
+
+WORKDIR /opt/flink
+
+CMD ["bash", "-c", "${FLINK_HOME}/bin/sql-client.sh && tail -f /dev/null"]
+
+================
+File: flink/sql-client/flink-conf.yaml
+================
+################################################################################
+# Copyright 2019 Ververica GmbH
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+################################################################################
+
+jobmanager.rpc.address: jobmanager
+rest.port: 18081
+state.backend: rocksdb
+state.backend.incremental: true
+state.checkpoint-storage: filesystem
+blob.server.port: 6124
+query.server.port: 6125
+classloader.resolve-order: parent-first
+jobmanager.archive.fs.cleanup-expired-jobs: false
+jobmanager.archive.fs.job-expiration-time: 24h
+rest.client.max-content-length: 104857600 # 100MB
+taskmanager.network.request-backoff.max: 120000
+heartbeat.timeout: 300000
+akka.ask.timeout: 60s
+
+================
+File: flink/sql-jobs/clickstream-filtering.sql
+================
+-- Configure Flink Settings for Streaming and State Management
+SET 'state.backend' = 'rocksdb';
+SET 'state.backend.incremental' = 'true';
+SET 'execution.checkpointing.mode' = 'EXACTLY_ONCE';
+SET 'execution.checkpointing.interval' = '10s';
+SET 'execution.checkpointing.min-pause' = '10s';
+SET 'sql-client.execution.result-mode' = 'TABLEAU';
+SET 'parallelism.default' = '1';
+
+-- Load Required Jars
+ADD JAR '/opt/flink/lib/flink-sql-connector-kafka-3.1.0-1.18.jar';
+ADD JAR '/opt/flink/lib/flink-json-1.18.1.jar';
+ADD JAR '/opt/flink/lib/iceberg-flink-runtime-1.18-1.5.0.jar';
+ADD JAR '/opt/flink/lib/hadoop-common-2.8.3.jar';
+ADD JAR '/opt/flink/lib/hadoop-hdfs-2.8.3.jar';
+ADD JAR '/opt/flink/lib/hadoop-client-2.8.3.jar';
+ADD JAR '/opt/flink/lib/flink-shaded-hadoop-2-uber-2.8.3-10.0.jar';
+ADD JAR '/opt/flink/lib/bundle-2.20.18.jar';
+
+-- Confirm Jars are Loaded
+SHOW JARS;
+
+DROP CATALOG IF EXISTS iceberg;
+CREATE CATALOG iceberg WITH (
+    'type' = 'iceberg',
+    'catalog-impl' = 'org.apache.iceberg.rest.RESTCatalog',  -- Use REST catalog
+    'uri' = 'http://iceberg-rest:8181',                     -- REST catalog server URL
+    'warehouse' = 's3://warehouse/',                        -- Warehouse location
+    'io-impl' = 'org.apache.iceberg.aws.s3.S3FileIO',       -- S3 file IO
+    's3.endpoint' = 'http://minio:9000',                    -- MinIO endpoint
+    's3.path-style-access' = 'true',                        -- Enable path-style access
+    'client.region' = 'us-east-1',                          -- S3 region
+    's3.access-key-id' = 'admin',                           -- MinIO access key
+    's3.secret-access-key' = 'password'                     -- MinIO secret key
+);
+
+-- Define Kafka Source Table
+DROP TABLE IF EXISTS clickstream_source;
+CREATE TABLE IF NOT EXISTS clickstream_source (
+    event_id STRING,
+    user_id STRING,
+    event_type STRING,
+    url STRING,
+    session_id STRING,
+    device STRING,
+    event_time TIMESTAMP_LTZ(3) METADATA FROM 'timestamp',
+    geo_location ROW<lat DOUBLE, lon DOUBLE>,
+    purchase_amount DOUBLE
+) WITH (
+    'connector' = 'kafka',
+    'topic' = 'clickstream',
+    'properties.bootstrap.servers' = 'broker:29092',
+    'scan.startup.mode' = 'earliest-offset',
+    'format' = 'json',
+    'json.ignore-parse-errors' = 'true',
+    'json.timestamp-format.standard' = 'ISO-8601'
+);
+
+-- Define Iceberg Sink Table
+CREATE DATABASE IF NOT EXISTS iceberg.db;
+DROP TABLE IF EXISTS iceberg.db.clickstream_sink;
+CREATE TABLE iceberg.db.clickstream_sink
+WITH (
+    'catalog-name' = 'iceberg',
+    'format' = 'parquet'
+)
+AS
+SELECT
+    event_id,
+    user_id,
+    event_type,
+    url,
+    session_id,
+    device,
+    event_time,
+    geo_location.lat AS latitude,
+    geo_location.lon AS longitude,
+    purchase_amount
+FROM clickstream_source
+WHERE event_type = 'purchase'
+  AND device IS NOT NULL;
+
+================
+File: producer/Dockerfile
+================
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY producer.py .
+
+#(optional, for debugging)
+EXPOSE 5000
+
+CMD ["python", "producer.py"]
+
+================
+File: producer/producer.py
+================
+import os
+import time
+import random
+import json
+import logging
+import signal
+import sys
+from faker import Faker
+from confluent_kafka import Producer
+
+fake = Faker()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Kafka configuration
+kafka_broker = os.getenv("KAFKA_BROKER")
+if not kafka_broker:
+    raise ValueError("KAFKA_BROKER environment variable is not set.")
+
+kafka_config = {
+    'bootstrap.servers': kafka_broker
+}
+producer = Producer(kafka_config)
+
+topic = 'clickstream'
+
+def generate_clickstream_event():
+    return {
+        "event_id": fake.uuid4(),
+        "user_id": fake.uuid4(),
+        "event_type": fake.random_element(elements=("page_view", "add_to_cart", "purchase", "logout")),
+        "url": fake.uri_path(),
+        "session_id": fake.uuid4(),
+        "device": fake.random_element(elements=("mobile", "desktop", "tablet")),
+        "geo_location": {
+            "lat": float(fake.latitude()),
+            "lon": float(fake.longitude())
+        },
+        "purchase_amount": float(random.uniform(0.0, 500.0)) if fake.boolean(chance_of_getting_true=30) else None
+    }
+
+def delivery_report(err, msg):
+    if err is not None:
+        logger.error(f"Message delivery failed: {err}")
+    else:
+        logger.info(f"Message delivered to {msg.topic()} [{msg.partition()}]")
+
+def signal_handler(sig, frame):
+    logger.info("Data generation stopped.")
+    producer.flush()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+
+if __name__ == "__main__":
+    try:
+        while True:
+            event = generate_clickstream_event()
+            try:
+                producer.produce(topic, key=event["session_id"], value=json.dumps(event), callback=delivery_report)
+            except BufferError as e:
+                logger.error(f"Buffer error: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error: {e}")
+            logger.info(json.dumps(event, indent=2))
+            time.sleep(1)
+            producer.poll(1)
+    except KeyboardInterrupt:
+        logger.info("Data generation stopped.")
+    finally:
+        producer.flush()
+
+================
+File: producer/requirements.txt
+================
+faker
+confluent-kafka
+
+================
+File: superset/Dockerfile
+================
+FROM apache/superset:latest
+
+USER root
+
+RUN pip install psycopg2-binary
+RUN pip install sqlalchemy-trino
+
+ENV ADMIN_USERNAME $ADMIN_USERNAME
+ENV ADMIN_EMAIL $ADMIN_EMAIL
+ENV ADMIN_PASSWORD $ADMIN_PASSWORD
+
+COPY ./superset-init.sh /superset-init.sh
+RUN chmod +x /superset-init.sh
+
+COPY superset_config.py /app/
+ENV SUPERSET_CONFIG_PATH /app/superset_config.py
+
+USER superset
+ENTRYPOINT [ "/superset-init.sh" ]
+
+================
+File: superset/superset_config.py
+================
+FEATURE_FLAGS = {
+    "ENABLE_TEMPLATE_PROCESSING": True,
+}
+
+ENABLE_PROXY_FIX = True
+SECRET_KEY = "YOUR_OWN_RANDOM_GENERATED_STRING"
+
+================
+File: superset/superset-init.sh
+================
+#!/bin/bash
+
+# create Admin user, you can read these values from env or anywhere else possible
+superset fab create-admin --username "$ADMIN_USERNAME" --firstname Superset --lastname Admin --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD"
+
+# Upgrading Superset metastore
+superset db upgrade
+
+# setup roles and permissions
+superset superset init 
+
+# Starting server
+/bin/sh -c /usr/bin/run-server.sh
+
+================
+File: trino/iceberg.properties
+================
+connector.name=iceberg
+iceberg.catalog.type=rest
+iceberg.rest-catalog.uri=http://rest:8181
+iceberg.rest-catalog.warehouse=s3://warehouse/
+iceberg.file-format=PARQUET
+
+# S3 Configuration for Iceberg
+fs.native-s3.enabled=true
+s3.endpoint=http://minio:9000
+s3.region=us-east-1
+s3.path-style-access=true
+s3.aws-access-key=admin
+s3.aws-secret-key=password
+
+================
+File: docker-compose.yaml
+================
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.2.1
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - 2181:2181
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks:
+      - iceberg_net
+
+  broker:
+    image: confluentinc/cp-server:7.2.1
+    hostname: kafka
+    container_name: broker
+    depends_on:
+      - zookeeper
+    ports:
+      - 9092:9092
+      - 29092:29092
+    healthcheck:
+      test: ["CMD-SHELL", "sleep 1;"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    environment:
+      # Basic Kafka configurations
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      # Logging settings
+      KAFKA_LOG4J_LOGGERS: org.apache.zookeeper=ERROR,org.apache.kafka=ERROR,kafka=ERROR,kafka.cluster=ERROR,kafka.controller=ERROR,kafka.coordinator=ERROR,kafka.log=ERROR,kafka.server=ERROR,kafka.zookeeper=ERROR,state.change.logger=ERROR
+      KAFKA_LOG4J_ROOT_LOGLEVEL: ERROR
+
+      # Metrics and telemetry configurations
+      KAFKA_METRIC_REPORTERS: io.confluent.metrics.reporter.ConfluentMetricsReporter
+      CONFLUENT_METRICS_REPORTER_BOOTSTRAP_SERVERS: broker:29092
+      CONFLUENT_METRICS_ENABLE: 'false'
+      CONFLUENT_TELEMETRY_ENABLED: 'false'  # Ensure telemetry is fully disabled
+      KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CONFLUENT_SUPPORT_METRICS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CONFLUENT_TELEMETRY_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CONFLUENT_METADATA_TOPIC_REPLICATION_FACTOR: 1
+
+    networks:
+      - iceberg_net
+
+  control-center:
+    image: confluentinc/cp-enterprise-control-center:7.2.1
+    hostname: control-center
+    container_name: control-center
+    depends_on:
+      - broker
+    ports:
+      - 9021:9021
+    environment:
+      CONTROL_CENTER_BOOTSTRAP_SERVERS: 'broker:29092'
+      CONTROL_CENTER_REPLICATION_FACTOR: 1
+      CONTROL_CENTER_INTERNAL_TOPICS_PARTITIONS: 1
+      CONTROL_CENTER_MONITORING_INTERCEPTOR_TOPIC_PARTITIONS: 1
+      CONFLUENT_METRICS_TOPIC_REPLICATION: 1
+      PORT: 9021
+    networks:
+      - iceberg_net
+
+  producer:
+    container_name: clickstream-producer
+    build:
+      context: ./producer
+    depends_on:
+      - broker
+    environment:
+      KAFKA_BROKER: broker:29092
+    networks:
+      - iceberg_net
+
+  ## FLINK
+  jobmanager:
+    container_name: jobmanager
+    image: flink:1.18.1-scala_2.12-java11
+    ports:
+      - 18081:18081
+    command: jobmanager   
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        rest.port: 18081
+        state.backend: rocksdb
+        state.backend.incremental: true
+        AWS_REGION=us-east-1
+        AWS_ACCESS_KEY_ID=admin
+        AWS_SECRET_ACCESS_KEY=password
+        AWS_DEFAULT_REGION=us-east-1
+        S3_ENDPOINT=http://minio:9000
+        S3_PATH_STYLE_ACCESS=true
+        JAVA_TOOL_OPTIONS=-Daws.accessKeyId=admin -Daws.secretKey=password
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18081"]
+    networks:
+      - iceberg_net
+
+  taskmanager:
+    container_name: taskmanager
+    image: flink:1.18.1-scala_2.12-java11
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        rest.port: 18081
+        taskmanager.numberOfTaskSlots: 2
+        state.backend: rocksdb
+        state.backend.incremental: true
+        AWS_REGION=us-east-1
+        AWS_ACCESS_KEY_ID=admin
+        AWS_SECRET_ACCESS_KEY=password
+        AWS_DEFAULT_REGION=us-east-1
+        S3_ENDPOINT=http://minio:9000
+        S3_PATH_STYLE_ACCESS=true
+        JAVA_TOOL_OPTIONS=-Daws.accessKeyId=admin -Daws.secretKey=password
+
+    networks:
+      - iceberg_net
+
+  sql-client:
+    container_name: sql-client
+    depends_on:
+      jobmanager:
+        condition: service_healthy
+      taskmanager:
+        condition: service_started
+    build:
+      context: ./flink/sql-client/
+    environment:
+      FLINK_JOBMANAGER_HOST: jobmanager
+      S3_ENDPOINT: http://minio:9000
+      S3_PATH_STYLE_ACCESS: true
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: password
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+      JAVA_TOOL_OPTIONS: -Daws.accessKeyId=admin -Daws.secretKey=password
+    volumes:
+      - type: bind
+        source: ${PWD}/flink/sql-client/flink-conf.yaml
+        target: /opt/flink/conf/flink-conf.yaml
+      - type: bind
+        source: ${PWD}/flink/sql-jobs/clickstream-filtering.sql
+        target: /opt/flink/clickstream-filtering.sql
+    command: >
+      /bin/sh -c "
+      /opt/flink/bin/sql-client.sh -f /opt/flink/clickstream-filtering.sql;
+      tail -f /dev/null
+      "
+    networks:
+      - iceberg_net
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=password
+      - MINIO_DOMAIN=minio
+    networks:
+      iceberg_net:
+        aliases:
+          - warehouse.minio
+    ports:
+      - 9001:9001
+      - 9000:9000
+    command: ["server", "/data", "--console-address", ":9001"]
+  mc:
+    depends_on:
+      - minio
+    image: minio/mc
+    container_name: mc
+    networks:
+      - iceberg_net
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+      - AWS_DEFAULT_REGION=us-east-1
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc rm -r --force minio/warehouse;
+      /usr/bin/mc mb minio/warehouse;
+      /usr/bin/mc policy set public minio/warehouse;
+      tail -f /dev/null
+      "
+
+  rest:
+    image: tabulario/iceberg-rest
+    container_name: iceberg-rest
+    ports:
+      - 8181:8181
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+      - CATALOG_WAREHOUSE=s3://warehouse/
+      - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
+      - CATALOG_S3_ENDPOINT=http://minio:9000
+    networks:
+      - iceberg_net
+
+  trino:
+    image: trinodb/trino:latest
+    container_name: trino
+    networks:
+      - iceberg_net
+    environment:
+      - TRINO_USER=admin
+      - TRINO_PASSWORD=admin
+    ports:
+      - 8080:8080
+    depends_on:
+      - rest
+      - minio
+    volumes:
+      - ./trino/iceberg.properties:/etc/trino/catalog/iceberg.properties
+
+  superset:
+      build:
+        context: ./superset
+      container_name: superset
+      networks:
+        - iceberg_net
+      environment:
+        - ADMIN_USERNAME=admin
+        - ADMIN_EMAIL=admin@superset.com
+        - ADMIN_PASSWORD=admin
+      ports:
+        - 8088:8088
+
+networks:
+  iceberg_net:
+    driver: bridge
+
+volumes:
+  minio_data:
+  superset-data:
+
+================
+File: LICENSE
+================
+MIT License
+
+Copyright (c) 2025 Abel dos Santos Tavares
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================
+File: README.md
+================
+**E2E Real-Time Data Pipeline with Kafka, Flink, Iceberg, Trino, MinIO, and Superset**
+======================================================================================
+
+![Docker](https://img.shields.io/badge/Docker-Enabled-blue?logo=docker)
+![Apache Kafka](https://img.shields.io/badge/Apache%20Kafka-Event%20Streaming-black?logo=apachekafka)
+![Apache Flink](https://img.shields.io/badge/Apache%20Flink-Real%20Time%20Processing-orange?logo=apacheflink)
+![Apache Iceberg](https://img.shields.io/badge/Apache%20Iceberg-Table%20Format-blue?logo=apache)
+![Trino](https://img.shields.io/badge/Trino-SQL%20Query%20Engine-green?logo=trino)
+![Apache Superset](https://img.shields.io/badge/Apache%20Superset-Visualization-ff69b4?logo=apache)
+
+
+**📖 Overview**
+---------------
+
+This project demonstrates a **real-time end-to-end (E2E) data pipeline** designed to handle clickstream data. It shows how to ingest, process, store, query, and visualize streaming data using open-source tools, all containerized with Docker for easy deployment.
+
+🔎 **Technologies Used:**
+
+-   **Data Ingestion:** [Apache Kafka](https://kafka.apache.org/)  
+-   **Stream Processing:** [Apache Flink](https://flink.apache.org/)  
+-   **Object Storage:** [MinIO (S3-compatible)](https://min.io/)
+-   **Data Lake Table Format:** [Apache Iceberg](https://iceberg.apache.org/)  
+-   **Query Engine:** [Trino](https://trino.io/)  
+-   **Visualization:** [Apache Superset](https://superset.apache.org/)    
+
+
+This pipeline is perfect for **data engineers** and **students** interested in learning how to design real-time data systems.
+
+* * * * *
+
+**🏗  Architecture**
+-----------------------------------
+
+![Architecture Diagram](img/e2e-pipeline.png)
+
+1.  **Clickstream Data Generator** simulates real-time user events and pushes them to **Kafka** topic.
+2.  **Apache Flink** processes Kafka streams and writes clean data to **Iceberg tables** stored on **MinIO**.
+3.  **Trino** connects to Iceberg for querying the processed data.
+4.  **Apache Superset** visualizes the data by connecting to Trino.
+
+
+🛠 **Tech Stack**
+-----------------
+
+| **Component**       | **Technology**                                                                 | **Purpose**                                     |
+|--------------------|-------------------------------------------------------------------------------|-------------------------------------------------|
+| **Data Generator**  | [Python (Faker)](https://faker.readthedocs.io/)                              | Simulate clickstream events                      |
+| **Data Ingestion**  | [Apache Kafka](https://kafka.apache.org/)                                    | Real-time event streaming                        |
+| **Coordination Service** | [Apache ZooKeeper](https://zookeeper.apache.org/) | Kafka broker coordination and metadata management |
+| **Stream Processing** | [Apache Flink](https://flink.apache.org/)                                  | Real-time data processing and transformation     |
+| **Data Lake Storage** | [Apache Iceberg](https://iceberg.apache.org/)                               | Data storage and schema management              |
+| **Object Storage**  | [MinIO](https://min.io/)                                                      | S3-compatible storage for Iceberg tables         |
+| **Query Engine**    | [Trino](https://trino.io/)                                                    | Distributed SQL querying on Iceberg data         |
+| **Visualization**   | [Apache Superset](https://superset.apache.org/)                               | Interactive dashboards and data visualization    |
+
+* * * * *
+
+
+**📦 Project Structure**
+------------------------
+
+```bash
+e2e-data-pipeline/
+├── docker-compose.yml   # Docker setup for all services
+├── flink/               # Flink SQL client and streaming jobs
+├── producer/            # Clickstream data producer using Faker
+├── superset/            # Superset setup and configuration
+└── trino/               # Trino configuration for Iceberg 
+```
+
+* * * * *
+
+**🔧 Setup Instructions**
+-------------------------
+
+### **1\. Prerequisites**
+
+-   **Docker** and **Docker Compose** installed.
+-   Minimum **16GB RAM** recommended.
+
+### **2\. Clone the Repository**
+
+```bash
+git clone https://github.com/abeltavares/real-time-data-pipeline.git
+cd real-time-data-pipeline
+```
+
+### **3\. Start All Services**
+
+```bash
+docker-compose up -d
+```
+
+⚠️ **Note:** All components (Kafka, Flink, Iceberg, Trino, MinIO, and Superset) are containerized using Docker for easy deployment and scalabilit
+
+### **4\. Access the Services**
+
+| **Service** | **URL** | **Credentials** |
+| --- | --- | --- |
+| **Kafka Control Center** | `http://localhost:9021` | *No Auth* |
+| **Flink Dashboard** | `http://localhost:18081` | *No Auth* |
+| **MinIO Console** | `http://localhost:9001` | `admin` / `password` |
+| **Trino UI** | `http://localhost:8080/ui` | *No Auth* |
+| **Superset** | `http://localhost:8088` | `admin` / `admin` |
+
+
+📥 **Data Ingestion**
+---------------------
+
+### 1\. **Clickstream Data Generation**
+
+Clickstream events are simulated using Python's **Faker** library. Here's the event structure:
+
+```python
+{
+  "event_id": fake.uuid4(),
+  "user_id": fake.uuid4(),
+  "event_type": fake.random_element(elements=("page_view",        "add_to_cart", "purchase", "logout")),
+  "url": fake.uri_path(),
+  "session_id": fake.uuid4(),
+  "device": fake.random_element(elements=("mobile", "desktop", "tablet")),
+  "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+  "geo_location": {
+      "lat": float(fake.latitude()),
+      "lon": float(fake.longitude())
+  },
+  "purchase_amount": float(random.uniform(0.0, 500.0)) if fake.boolean(chance_of_getting_true=30) else None
+}
+```
+
+⚠️ **Note:** The **Clickstream Producer** runs automatically when Docker Compose is up. No manual execution is needed.
+
+### 2\. **Kafka Consumer**
+
+The Kafka consumer reads the clickstream events and pushes them to **Apache Flink** for real-time processing.
+
+You can monitor the Kafka topic through the **Kafka Control Center**:
+
+-   **Kafka Control Center URL:** <http://localhost:9021>
+
+![Kafka Topic](img/topic-clickstream.png)
+
+* * * * *
+
+⚡ **Real-Time Data Processing with Apache Flink**
+-------------------------------------------------
+
+### 1\. **Flink Configuration**
+
+-   **State Backend:** RocksDB
+-   **Checkpointing:** Enabled for fault tolerance
+-   **Connectors:** Kafka → Iceberg (via Flink SQL)
+
+### 2\. **Flink SQL Job Execution**
+
+The `sql-client` service in Docker Compose automatically submits the Flink SQL job after the JobManager and TaskManager are running. It uses the `clickstream-filtering.sql` script to process Kafka streams and write to Iceberg.
+
+```bash
+/opt/flink/bin/sql-client.sh -f /opt/flink/clickstream-filtering.sql
+```
+
+### 2\. **Flink Dashboard**
+
+Monitor real-time data processing jobs at:\
+📊 http://localhost:18081
+
+![Flink Job](img/flink-job.png)
+
+* * * * *
+
+🗄️ **Data Lakehouse with Apache Iceberg**
+------------------------------------------
+
+Processed data from Flink is stored in **Iceberg tables** on **MinIO**. This enables:
+
+-   **Efficient Querying** with Trino
+-   **Schema Evolution** and **Time Travel**
+
+To list the contents of the MinIO warehouse, you can use the following command:
+
+```bash
+docker exec mc bash -c "mc ls -r minio/warehouse/"
+```
+
+Alternatively, you can access the MinIO console via the web at <http://localhost:9001>.
+
+-   **Username:** `admin`
+-   **Password:** `password`
+
+![Warehouse Bucket](img/warehouse-bucket.png)
+
+**🔍 Query Data with Trino**
+----------------------------
+
+ **1\. Run Trino CLI**
+
+```bash
+docker-compose exec trino trino
+```
+
+**2\. Connect to Iceberg Catalog**
+
+```sql
+USE iceberg.db;
+```
+
+**3\. Query Processed Data**
+
+```sql
+SELECT * FROM iceberg.db.clickstream_sink
+WHERE purchase_amount > 100
+LIMIT 10;
+```
+
+![Trino Query](img/trino-query.png)
+
+📊 **Data Visualization with Apache Superset**
+----------------------------------------------
+
+1.  **Access Superset:** <http://localhost:8088>
+
+    -   **Username:** `admin`
+    -   **Password:** `admin`
+2.  **Connect Superset to Trino:**
+
+-   **SQLAlchemy URI:**
+
+    ```bash
+    trino://trino@trino:8080/iceberg/db
+    ```
+-   **Configure in Superset:**
+
+    1.  Open `http://localhost:8088`
+    2.  Go to **Data** → **Databases** → **+**
+    3.  Use the above SQLAlchemy URI.
+
+3.  **Create Dashboards:**
+
+![Superset](img/superset_dashboard.png)
+
+🏆 **Key Features**
+-------------------
+
+### 🔄 **Real-Time Data Processing**
+
+-   Stream processing with **Apache Flink**.
+-   Clickstream events are transformed and filtered in real-time.
+
+### 📂 **Modern Data Lakehouse**
+
+-   Data is stored in **Apache Iceberg** on **MinIO**, S3 compatible, supporting schema evolution and time travel.
+
+### ⚡ **Fast SQL Analytics**
+
+-   **Trino** provides fast, distributed SQL queries on Iceberg data.
+
+### 📊 **Interactive Dashboards**
+
+-   **Apache Superset** delivers real-time visual analytics.
+
+### 📦 **Fully Containerized Setup**
+
+-   Simplified deployment using **Docker** and **Docker Compose** for seamless integration across all services.
+
+* * * * *
+
+📈 **Future Enhancements**
+--------------------------
+
+-   Implement **alerting** and **monitoring** with **Grafana** and **Prometheus**.
+-   Introduce **machine learning pipelines** for predictive analytics.
+-   Optimize **Iceberg partitioning** for faster queries.
+
+* * * * *
+
+📎 **Quick Reference Commands**
+-------------------------------
+
+| **Component** | **Command** |
+| --- | --- |
+| **Start Services** | `docker-compose up --build -d` |
+| **Stop Services** | `docker-compose down` |
+| **View Running Containers** | `docker ps` |
+| **Check Logs** | `docker-compose logs -f` |
+| **Rebuild Containers** | `docker-compose up --build --force-recreate -d` |
+
+* * * * *
+
+🙌 **Get Involved**
+-------------------
+
+Contributions are welcome! Feel free to submit issues or pull requests to improve this project.
+
+* * * * *
+
+📜 License
+--------------
+
+This project is licensed under the [MIT License](LICENSE).
+
+* * * * *
+
+Enjoy exploring real-time data pipelines!
+
+
+
+================================================================
+End of Codebase
+================================================================

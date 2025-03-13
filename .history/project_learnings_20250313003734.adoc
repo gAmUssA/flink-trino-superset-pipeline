@@ -1,0 +1,49 @@
+= Flink-Trino-Superset Pipeline: Project Learnings
+:toc:
+:icons: font
+:source-highlighter: highlight.js
+:imagesdir: images
+
+== 📋 Project Overview
+
+This document summarizes the key learnings and issues addressed in the Flink-Trino-Superset data pipeline project.
+
+== 🏗️ Architecture
+
+[source,mermaid]
+----
+flowchart LR
+    DG[Data Generator] --> K[Apache Kafka]
+    K --> F[Apache Flink]
+    F --> I[Apache Iceberg]
+    I --> T[Trino]
+    T --> S[Apache Superset]
+----
+
+The pipeline consists of the following components:
+
+* *Data Generator*: Python application that produces synthetic user activity and sensor data
+* *Apache Kafka*: Message broker for data ingestion (running in KRaft mode without Zookeeper)
+* *Apache Flink*: Stream processing framework for real-time data processing
+* *Apache Iceberg*: Table format for data lake storage
+* *Trino*: Distributed SQL query engine
+* *Apache Superset*: Data visualization and dashboarding
+
+== 🔄 Data Flow
+
+1. The *Data Generator* produces two types of sample data:
+   * User activity data (page views, clicks, searches, purchases, etc.)
+   * Sensor data (temperature, humidity, pressure, light, motion)
+
+2. Data is sent to *Kafka* topics:
+   * `user-activity` topic for user events
+   * `sensor-data` topic for sensor readings
+
+3. *Flink* jobs consume data from Kafka:
+   * `UserActivityProcessor` processes user activity events
+   * `SensorDataProcessor` processes sensor data
+
+4. Processed data is written to *Iceberg* tables:
+   * `iceberg.warehouse.user_activity`
+   * `iceberg.warehouse.sensor_data`
+

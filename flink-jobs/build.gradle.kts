@@ -10,13 +10,10 @@ version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
-    maven {
-        url = uri("https://packages.iceberg.apache.org/maven")
-    }
 }
 
 val flinkVersion = "1.20.0"
-val icebergVersion = "1.5.0" 
+val icebergVersion = "1.8.1" 
 val kafkaConnectorVersion = "3.4.0-1.20"
 
 dependencies {
@@ -27,6 +24,10 @@ dependencies {
     implementation("org.apache.flink:flink-table-api-java-bridge:$flinkVersion")
     implementation("org.apache.flink:flink-table-common:$flinkVersion")
     implementation("org.apache.flink:flink-runtime:$flinkVersion")
+    
+    // Flink Table API dependencies
+    implementation("org.apache.flink:flink-table-runtime:$flinkVersion")
+    implementation("org.apache.flink:flink-table-planner-loader:$flinkVersion")
 
     // Flink Kafka connector
     implementation("org.apache.flink:flink-connector-kafka:$kafkaConnectorVersion")
@@ -37,19 +38,24 @@ dependencies {
     // Flink JSON serialization
     implementation("org.apache.flink:flink-json:$flinkVersion")
 
-    // We'll use Flink's built-in file sink instead of Iceberg for simplicity
-
+    // Iceberg integration for Flink
+    implementation("org.apache.iceberg:iceberg-flink-runtime-1.20:$icebergVersion")
+    implementation("org.apache.iceberg:iceberg-aws:$icebergVersion")
+    implementation("org.apache.iceberg:iceberg-core:$icebergVersion")
+    
     // AWS S3 dependencies
-    implementation("org.apache.hadoop:hadoop-aws:3.3.4")
-    implementation("org.apache.hadoop:hadoop-common:3.3.4")
+    implementation("org.apache.flink:flink-s3-fs-hadoop:$flinkVersion")
+    implementation("org.apache.hadoop:hadoop-aws:3.3.6")
+    implementation("org.apache.hadoop:hadoop-common:3.3.6")
+    implementation("software.amazon.awssdk:s3:2.25.12")
 
     // Logging
-    implementation("org.slf4j:slf4j-api:1.7.36")
-    implementation("org.slf4j:slf4j-log4j12:1.7.36")
-    implementation("log4j:log4j:1.2.17")
+    implementation("org.slf4j:slf4j-api:2.0.12")
+    implementation("ch.qos.logback:logback-classic:1.4.14")
 
     // Jackson for JSON processing
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.13.4.2")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.15.3")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.3")
 }
 
 java {

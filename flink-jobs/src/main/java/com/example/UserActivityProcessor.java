@@ -1,116 +1,136 @@
 package com.example;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.flink.api.common.eventtime.WatermarkStrategy;
-import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.serialization.SimpleStringSchema;
-import org.apache.flink.connector.kafka.source.KafkaSource;
-import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.api.common.serialization.SimpleStringEncoder;
-import org.apache.flink.api.java.tuple.Tuple8;
-import org.apache.flink.connector.file.sink.FileSink;
-import org.apache.flink.core.fs.Path;
-import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.DefaultRollingPolicy;
+import org.apache.flink.table.api.EnvironmentSettings;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableDescriptor;
+import org.apache.flink.table.api.TableEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Expressions;
+import org.apache.flink.types.Row;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
-import java.util.concurrent.TimeUnit;
+import static org.apache.flink.table.api.Expressions.$;
 
 /**
- * Flink job to process user activity data from Kafka and write to Iceberg.
+ * Flink job to process user activity data from Kafka and write to Iceberg using Table API.
  */
 public class UserActivityProcessor {
     private static final Logger LOG = LoggerFactory.getLogger(UserActivityProcessor.class);
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public static void main(String[] args) throws Exception {
-        // Set up the streaming execution environment
-        final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        
-        // Configure Kafka source
-        KafkaSource<String> source = KafkaSource.<String>builder()
-                .setBootstrapServers("kafka:9092")
-                .setTopics("user-activity")
-                .setGroupId("user-activity-processor")
-                .setStartingOffsets(OffsetsInitializer.earliest())
-                .setValueOnlyDeserializer(new SimpleStringSchema())
+        // Set up the table environment
+        EnvironmentSettings settings = EnvironmentSettings.newInstance()
+                .inStreamingMode()
                 .build();
+        TableEnvironment tableEnv = TableEnvironment.create(settings);
 
-        // Read from Kafka
-        DataStream<String> kafkaStream = env.fromSource(
-                source,
-                WatermarkStrategy.noWatermarks(),
-                "Kafka Source"
+        // Configure Kafka source table
+        tableEnv.createTemporaryTable("user_activity_source", TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("user_id", DataTypes.STRING())
+                        .column("event_type", DataTypes.STRING())
+                        .column("timestamp", DataTypes.TIMESTAMP(3))
+                        .column("session_id", DataTypes.STRING())
+                        .column("ip_address", DataTypes.STRING())
+                        .column("user_agent", DataTypes.STRING())
+                        .column("page_url", DataTypes.STRING())
+                        .column("referrer", DataTypes.STRING())
+                        .column("time_spent", DataTypes.INT())
+                        .column("element_id", DataTypes.STRING())
+                        .column("search_query", DataTypes.STRING())
+                        .column("results_count", DataTypes.INT())
+                        .column("order_id", DataTypes.STRING())
+                        .column("product_ids", DataTypes.ARRAY(DataTypes.STRING()))
+                        .column("total_amount", DataTypes.DOUBLE())
+                        .column("currency", DataTypes.STRING())
+                        .watermark("timestamp", "timestamp - INTERVAL '5' SECOND")
+                        .build())
+                .option("connector", "kafka")
+                .option("topic", "user-activity")
+                .option("properties.bootstrap.servers", "kafka:9092")
+                .option("properties.group.id", "user-activity-processor")
+                .option("scan.startup.mode", "earliest-offset")
+                .option("format", "json")
+                .option("json.ignore-parse-errors", "true")
+                .option("json.timestamp-format.standard", "ISO-8601")
+                .build());
+
+        // Configure Iceberg catalog
+        tableEnv.executeSql("CREATE CATALOG iceberg_catalog WITH (" +
+                "'type'='iceberg'," +
+                "'catalog-impl'='org.apache.iceberg.rest.RESTCatalog'," +
+                "'uri'='http://iceberg-rest:8181'," +
+                "'warehouse'='s3://warehouse/'," +
+                "'io-impl'='org.apache.iceberg.aws.s3.S3FileIO'," +
+                "'s3.endpoint'='http://minio:9000'," +
+                "'s3.path-style-access'='true'," +
+                "'client.region'='us-east-1'," +
+                "'s3.access-key-id'='minioadmin'," +
+                "'s3.secret-access-key'='minioadmin'" +
+                ")");
+
+        // Use the catalog and create database
+        tableEnv.executeSql("USE CATALOG iceberg_catalog");
+        tableEnv.executeSql("CREATE DATABASE IF NOT EXISTS db");
+        tableEnv.executeSql("USE db");
+
+        // Create the sink table
+        tableEnv.executeSql("CREATE TABLE IF NOT EXISTS user_activity_sink (" +
+                "user_id STRING," +
+                "event_type STRING," +
+                "event_time TIMESTAMP(3)," +
+                "session_id STRING," +
+                "ip_address STRING," +
+                "user_agent STRING," +
+                "page_url STRING," +
+                "referrer STRING," +
+                "time_spent INT," +
+                "element_id STRING," +
+                "search_query STRING," +
+                "results_count INT," +
+                "order_id STRING," +
+                "product_ids ARRAY<STRING>," +
+                "total_amount DOUBLE," +
+                "currency STRING," +
+                "processing_time TIMESTAMP(3)," +
+                "PRIMARY KEY (user_id, session_id) NOT ENFORCED" +
+                ") WITH (" +
+                "'format' = 'parquet'," +
+                "'write-format' = 'parquet'" +
+                ")");
+
+        // Get the source table
+        Table sourceTable = tableEnv.from("user_activity_source");
+
+        // Transform the data
+        Table resultTable = sourceTable.select(
+                $("user_id"),
+                $("event_type"),
+                $("timestamp").as("event_time"),
+                $("session_id"),
+                $("ip_address"),
+                $("user_agent"),
+                $("page_url"),
+                $("referrer"),
+                $("time_spent"),
+                $("element_id"),
+                $("search_query"),
+                $("results_count"),
+                $("order_id"),
+                $("product_ids"),
+                $("total_amount"),
+                $("currency"),
+                Expressions.callSql("CURRENT_TIMESTAMP").as("processing_time")
         );
 
-        // Parse JSON and convert to Tuple8
-        DataStream<Tuple8<String, String, String, String, String, String, String, Double>> processedStream = 
-            kafkaStream.map(new MapFunction<String, Tuple8<String, String, String, String, String, String, String, Double>>() {
-                @Override
-                public Tuple8<String, String, String, String, String, String, String, Double> map(String value) throws Exception {
-                    JsonNode jsonNode = OBJECT_MAPPER.readTree(value);
-                    
-                    // Extract fields from JSON
-                    String userId = jsonNode.get("user_id").asText();
-                    String eventType = jsonNode.get("event_type").asText();
-                    
-                    // Parse timestamp
-                    String timestampStr = jsonNode.get("timestamp").asText();
-                    
-                    String sessionId = jsonNode.get("session_id").asText();
-                    String ipAddress = jsonNode.get("ip_address").asText();
-                    String userAgent = jsonNode.get("user_agent").asText();
-                    
-                    // Handle optional fields
-                    String pageUrl = jsonNode.has("page_url") ? jsonNode.get("page_url").asText() : "";
-                    Double totalAmount = jsonNode.has("total_amount") ? jsonNode.get("total_amount").asDouble() : 0.0;
-                    
-                    return new Tuple8<>(userId, eventType, timestampStr, sessionId, ipAddress, userAgent, pageUrl, totalAmount);
-                }
-            });
-        
-        // Configure file sink
-        final FileSink<Tuple8<String, String, String, String, String, String, String, Double>> sink = FileSink
-            .forRowFormat(new Path("file:///tmp/user_activity"), 
-                new SimpleStringEncoder<Tuple8<String, String, String, String, String, String, String, Double>>() {
-                    public byte[] encode(Tuple8<String, String, String, String, String, String, String, Double> element) {
-                        return String.format("%s,%s,%s,%s,%s,%s,%s,%f\n",
-                            element.f0,  // user_id
-                            element.f1,  // event_type
-                            element.f2,  // timestamp
-                            element.f3,  // session_id
-                            element.f4,  // ip_address
-                            element.f5,  // user_agent
-                            element.f6,  // page_url
-                            element.f7   // total_amount
-                        ).getBytes();
-                    }
-                })
-            .withRollingPolicy(
-                DefaultRollingPolicy.builder()
-                    .withRolloverInterval(TimeUnit.MINUTES.toMillis(15))
-                    .withInactivityInterval(TimeUnit.MINUTES.toMillis(5))
-                    .withMaxPartSize(1024 * 1024 * 1024)
-                    .build())
-            .build();
-        
-        // Add sink to the pipeline
-        processedStream.sinkTo(sink);
-        
-        // Also print the data to stdout for debugging
-        processedStream.print();
+        // Print the result schema for debugging
+        LOG.info("Result schema: {}", resultTable.getSchema());
 
-        // Execute the Flink job
-        env.execute("User Activity Processor");
+        // Insert the data into the sink table
+        resultTable.executeInsert("user_activity_sink");
+
+        LOG.info("User Activity Processor job submitted");
     }
 }

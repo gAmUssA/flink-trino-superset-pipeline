@@ -1,7 +1,7 @@
 services:
   # Kafka - Message broker for data ingestion in KRaft mode
   kafka:
-    image: apache/kafka:3.8.0
+    image: apache/kafka:3.9.0
     container_name: kafka
     ports:
       - "9092:9092"
@@ -29,20 +29,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Kafka UI - Web interface for Kafka management
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
-    depends_on:
-      - kafka
-    ports:
-      - "8080:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-    networks:
-      - pipeline-network
 
   # Minio - S3-compatible storage for Iceberg data
   minio:
@@ -136,27 +122,6 @@ services:
     networks:
       - pipeline-network
 
-  # MySQL for Trino metadata
-  mysql:
-    image: mysql:8.0
-    container_name: mysql
-    ports:
-      - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_USER: trino
-      MYSQL_PASSWORD: trino
-      MYSQL_DATABASE: trino
-    volumes:
-      - mysql-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    networks:
-      - pipeline-network
-
   # Iceberg REST Catalog - Metadata service for Iceberg tables
   iceberg-rest:
     image: tabulario/iceberg-rest
@@ -167,7 +132,7 @@ services:
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - AWS_REGION=us-east-1
-      - CATALOG_WAREHOUSE=s3://warehouse/
+      - CATALOG_WAREHOUSE=s3://warehouse
       - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
       - CATALOG_S3_ENDPOINT=http://minio:9000
     networks:
@@ -177,7 +142,7 @@ services:
 
   # Trino Coordinator - SQL query engine
   trino-coordinator:
-    image: trinodb/trino:410
+    image: trinodb/trino:latest
     container_name: trino-coordinator
     ports:
       - "8082:8080"
@@ -245,9 +210,28 @@ services:
     networks:
       - pipeline-network
 
+  # Flink SQL Client - For executing SQL queries on Flink
+  flink-sql-client:
+    image: flink:1.20.0-java17
+    container_name: flink-sql-client
+    command: bin/sql-client.sh
+    depends_on:
+      - flink-jobmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        classloader.resolve-order: parent-first
+    volumes:
+      - ./flink-jobs:/opt/flink-sql-client/scripts
+    networks:
+      - pipeline-network
+    tty: true
+    stdin_open: true
+
 networks:
   pipeline-network:
-    driver: bridge
 
 volumes:
   kafka-data:

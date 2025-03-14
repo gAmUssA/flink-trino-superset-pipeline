@@ -39,10 +39,13 @@ help:
 	@echo "  $(YELLOW)clean$(RESET)             - Clean up build artifacts"
 	@echo "  $(YELLOW)logs$(RESET)              - Show logs from all services"
 	@echo "  $(YELLOW)smoketest$(RESET)         - Validate startup of all containers"
+	@echo "  $(YELLOW)validate-setup$(RESET)    - Validate SQL scripts and Java code setup"
 	@echo "  $(YELLOW)build-flink-jobs$(RESET)  - Build Flink jobs"
 	@echo "  $(YELLOW)deploy-flink-jobs$(RESET) - Deploy Flink jobs to the cluster"
+	@echo "  $(YELLOW)deploy-sql-scripts$(RESET) - Deploy SQL scripts to Flink SQL Client"
 	@echo "  $(YELLOW)create-tables$(RESET)     - Create Iceberg tables in Trino"
 	@echo "  $(YELLOW)setup-superset$(RESET)    - Set up Superset dashboards"
+	@echo "  $(YELLOW)urls$(RESET)              - Show all service URLs and credentials"
 	@echo "  $(YELLOW)demo$(RESET)              - Run complete demo (build, start, validate, deploy)"
 
 # 🏗️ Build all components
@@ -110,6 +113,28 @@ deploy-flink-jobs: build-flink-jobs
 	docker exec flink-jobmanager flink run -c com.example.SensorDataProcessor /opt/flink/usrlib/sensor-data-processor-1.0-SNAPSHOT.jar || \
 		echo "$(BOLD)$(YELLOW)⚠️ There was an issue deploying the SensorDataProcessor job. This might be expected if the job is already running.$(RESET)"
 
+# 📝 Deploy SQL scripts to Flink SQL Client
+.PHONY: deploy-sql-scripts
+deploy-sql-scripts: validate-setup
+	@echo "$(BOLD)$(GREEN)📝 Deploying SQL scripts to Flink SQL Client...$(RESET)"
+	@if ! docker-compose ps flink-sql-client | grep "Up" > /dev/null; then \
+		echo "$(BOLD)$(RED)❌ Flink SQL Client is not running!$(RESET)"; \
+		echo "$(YELLOW)Please start the services with 'make up' and try again.$(RESET)"; \
+		exit 1; \
+	fi
+
+	@echo "$(CYAN)Creating scripts directory in Flink SQL Client container...$(RESET)"
+	docker exec flink-sql-client mkdir -p /opt/flink-sql-client/scripts
+
+	@echo "$(CYAN)Copying SQL scripts to Flink SQL Client container...$(RESET)"
+	docker cp flink-jobs/sql-jobs/sensor-data-to-iceberg.sql flink-sql-client:/opt/flink-sql-client/scripts/
+	docker cp flink-jobs/sql-jobs/user-activity-to-iceberg.sql flink-sql-client:/opt/flink-sql-client/scripts/
+
+	@echo "$(GREEN)✅ SQL scripts deployed to Flink SQL Client!$(RESET)"
+	@echo "$(YELLOW)To run a SQL script, use:$(RESET)"
+	@echo "  docker exec -it flink-sql-client ./bin/sql-client.sh -f /opt/flink-sql-client/scripts/sensor-data-to-iceberg.sql"
+	@echo "  docker exec -it flink-sql-client ./bin/sql-client.sh -f /opt/flink-sql-client/scripts/user-activity-to-iceberg.sql"
+
 # 📊 Create Iceberg tables in Trino
 .PHONY: create-tables
 create-tables:
@@ -130,50 +155,136 @@ smoketest:
 	@echo "$(CYAN)Checking Kafka...$(RESET)"
 	@docker-compose ps kafka | grep "Up" || (echo "$(BOLD)$(RED)❌ Kafka is not running!$(RESET)" && exit 1)
 	@echo "$(GREEN)✅ Kafka is running$(RESET)"
-	
-	@echo "$(CYAN)Checking Kafka UI...$(RESET)"
-	@docker-compose ps kafka-ui | grep "Up" || (echo "$(BOLD)$(RED)❌ Kafka UI is not running!$(RESET)" && exit 1)
-	@echo "$(GREEN)✅ Kafka UI is running$(RESET)"
-	
+
 	@echo "$(CYAN)Checking Minio...$(RESET)"
 	@docker-compose ps minio | grep "Up" || (echo "$(BOLD)$(RED)❌ Minio is not running!$(RESET)" && exit 1)
 	@echo "$(GREEN)✅ Minio is running$(RESET)"
-	
+
 	@echo "$(CYAN)Checking Flink JobManager...$(RESET)"
 	@docker-compose ps flink-jobmanager | grep "Up" || (echo "$(BOLD)$(RED)❌ Flink JobManager is not running!$(RESET)" && exit 1)
 	@echo "$(GREEN)✅ Flink JobManager is running$(RESET)"
-	
+
 	@echo "$(CYAN)Checking Flink TaskManager...$(RESET)"
 	@docker-compose ps flink-taskmanager | grep "Up" || (echo "$(BOLD)$(RED)❌ Flink TaskManager is not running!$(RESET)" && exit 1)
 	@echo "$(GREEN)✅ Flink TaskManager is running$(RESET)"
-	
-	@echo "$(CYAN)Checking MySQL...$(RESET)"
-	@docker-compose ps mysql | grep "Up" || (echo "$(BOLD)$(RED)❌ MySQL is not running!$(RESET)" && exit 1)
-	@echo "$(GREEN)✅ MySQL is running$(RESET)"
-	
+
 	@echo "$(CYAN)Checking Iceberg REST Catalog...$(RESET)"
 	@docker-compose ps iceberg-rest | grep "Up" || (echo "$(BOLD)$(RED)❌ Iceberg REST Catalog is not running!$(RESET)" && exit 1)
 	@echo "$(GREEN)✅ Iceberg REST Catalog is running$(RESET)"
-	
+
 	@echo "$(CYAN)Checking Trino...$(RESET)"
 	@docker-compose ps trino-coordinator | grep "Up" || (echo "$(BOLD)$(RED)❌ Trino is not running!$(RESET)" && exit 1)
 	@echo "$(GREEN)✅ Trino is running$(RESET)"
-	
+
 	@echo "$(CYAN)Checking Superset...$(RESET)"
 	@docker-compose ps superset | grep "Up" || (echo "$(BOLD)$(RED)❌ Superset is not running!$(RESET)" && exit 1)
 	@echo "$(GREEN)✅ Superset is running$(RESET)"
-	
+
 	@echo "$(CYAN)Checking Data Generator...$(RESET)"
 	@docker-compose ps data-generator | grep "Up" || (echo "$(BOLD)$(RED)❌ Data Generator is not running!$(RESET)" && exit 1)
 	@echo "$(GREEN)✅ Data Generator is running$(RESET)"
-	
+
+	@echo "$(CYAN)Checking Flink SQL Client...$(RESET)"
+	@docker-compose ps flink-sql-client | grep "Up" || (echo "$(BOLD)$(RED)❌ Flink SQL Client is not running!$(RESET)" && exit 1)
+	@echo "$(GREEN)✅ Flink SQL Client is running$(RESET)"
+
 	@echo "$(BOLD)$(GREEN)✅ All containers are running!$(RESET)"
+
+# 🔍 Validate SQL scripts and Java code setup
+.PHONY: validate-setup
+validate-setup:
+	@echo "$(BOLD)$(GREEN)🔍 Validating SQL scripts and Java code setup...$(RESET)"
+
+	@echo "$(CYAN)Checking SQL scripts directory...$(RESET)"
+	@if [ ! -d "flink-jobs/sql-jobs" ]; then \
+		echo "$(BOLD)$(RED)❌ SQL scripts directory not found!$(RESET)"; \
+		echo "$(YELLOW)Creating SQL scripts directory...$(RESET)"; \
+		mkdir -p flink-jobs/sql-jobs; \
+	else \
+		echo "$(GREEN)✅ SQL scripts directory exists$(RESET)"; \
+	fi
+
+	@echo "$(CYAN)Checking SQL scripts...$(RESET)"
+	@missing_scripts=0; \
+	for script in sensor-data-to-iceberg.sql user-activity-to-iceberg.sql; do \
+		if [ ! -f "flink-jobs/sql-jobs/$$script" ]; then \
+			echo "$(BOLD)$(RED)❌ $$script not found!$(RESET)"; \
+			missing_scripts=1; \
+		else \
+			echo "$(GREEN)✅ $$script exists$(RESET)"; \
+		fi; \
+	done; \
+	if [ $$missing_scripts -eq 1 ]; then \
+		echo "$(YELLOW)Please create the missing SQL scripts.$(RESET)"; \
+	fi
+
+	@echo "$(CYAN)Checking Java source files...$(RESET)"
+	@missing_java=0; \
+	for java_file in SensorDataProcessor.java UserActivityProcessor.java; do \
+		if [ ! -f "flink-jobs/src/main/java/com/example/$$java_file" ]; then \
+			echo "$(BOLD)$(RED)❌ $$java_file not found!$(RESET)"; \
+			missing_java=1; \
+		else \
+			echo "$(GREEN)✅ $$java_file exists$(RESET)"; \
+		fi; \
+	done; \
+	if [ $$missing_java -eq 1 ]; then \
+		echo "$(YELLOW)Please create the missing Java source files.$(RESET)"; \
+	fi
+
+	@echo "$(CYAN)Checking build.gradle.kts...$(RESET)"
+	@if [ ! -f "flink-jobs/build.gradle.kts" ]; then \
+		echo "$(BOLD)$(RED)❌ build.gradle.kts not found!$(RESET)"; \
+	else \
+		echo "$(GREEN)✅ build.gradle.kts exists$(RESET)"; \
+		if grep -q "org.apache.iceberg" "flink-jobs/build.gradle.kts"; then \
+			echo "$(GREEN)✅ Iceberg dependencies found in build.gradle.kts$(RESET)"; \
+		else \
+			echo "$(BOLD)$(RED)❌ Iceberg dependencies not found in build.gradle.kts!$(RESET)"; \
+			echo "$(YELLOW)Please add Iceberg dependencies to build.gradle.kts.$(RESET)"; \
+		fi; \
+	fi
+
+	@echo "$(BOLD)$(GREEN)✅ Setup validation complete!$(RESET)"
 
 # 📈 Set up Superset dashboards
 .PHONY: setup-superset
 setup-superset:
 	@echo "$(BOLD)$(GREEN)📈 Setting up Superset dashboards...$(RESET)"
 	@echo "$(YELLOW)Please access Superset at http://localhost:8088 and log in with admin/admin$(RESET)"
+
+# 🔗 Show all service URLs and credentials
+.PHONY: urls
+urls:
+	@echo "$(BOLD)$(CYAN)🔗 Service URLs and Credentials$(RESET)"
+	@echo ""
+	@echo "$(BOLD)$(MAGENTA)Stream Processing:$(RESET)"
+	@echo "  $(GREEN)🚀 Flink Dashboard:$(RESET)       http://localhost:8081"
+	@echo "  $(GREEN)🖥️  Flink SQL Client:$(RESET)      Use 'docker exec -it flink-sql-client ./bin/sql-client.sh'"
+	@echo ""
+	@echo "$(BOLD)$(MAGENTA)Data Sources:$(RESET)"
+	@echo "  $(GREEN)📈 Data Generator:$(RESET)        Running in container 'data-generator'"
+	@echo "  $(GREEN)🔄 Kafka:$(RESET)                 localhost:9092 (inside Docker network)"
+	@echo ""
+	@echo "$(BOLD)$(MAGENTA)Storage:$(RESET)"
+	@echo "  $(GREEN)🗄️  Minio Console:$(RESET)         http://localhost:9001"
+	@echo "  $(YELLOW)   Username:$(RESET) minioadmin"
+	@echo "  $(YELLOW)   Password:$(RESET) minioadmin"
+	@echo ""
+	@echo "  $(GREEN)🧊 Iceberg REST Catalog:$(RESET)  http://localhost:8181"
+	@echo ""
+	@echo "$(BOLD)$(MAGENTA)Query Engines:$(RESET)"
+	@echo "  $(GREEN)🔍 Trino UI:$(RESET)              http://localhost:8082/ui/"
+	@echo "  $(YELLOW)   Username:$(RESET) admin"
+	@echo ""
+	@echo "  $(GREEN)📊 Trino CLI:$(RESET)             Use 'docker exec -it trino-coordinator trino --server localhost:8080 --catalog iceberg'"
+	@echo ""
+	@echo "$(BOLD)$(MAGENTA)Visualization:$(RESET)"
+	@echo "  $(GREEN)📈 Superset:$(RESET)              http://localhost:8088"
+	@echo "  $(YELLOW)   Username:$(RESET) admin"
+	@echo "  $(YELLOW)   Password:$(RESET) admin"
+	@echo ""
+	@echo "$(BOLD)$(YELLOW)Note:$(RESET) Make sure all services are running with 'make up' before accessing these URLs."
 
 # 🔄 Wait for Trino to be ready
 .PHONY: wait-for-trino
@@ -209,54 +320,114 @@ wait-for-data:
 		sleep 1; \
 	done
 
+# 🔍 Verify data flow
+.PHONY: verify-data-flow
+verify-data-flow: wait-for-trino
+	@echo "$(BOLD)$(GREEN)🔍 Verifying data flow...$(RESET)"
+	@echo "$(CYAN)Checking user activity data...$(RESET)"
+	@user_count=$$(docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg --execute "SELECT COUNT(*) FROM warehouse.user_activity" | grep -v "^_" | tr -d ' ' || echo "0")
+	@if [ "$$user_count" -gt 0 ]; then \
+		echo "$(GREEN)✅ User activity data is present ($$user_count rows)$(RESET)"; \
+	else \
+		echo "$(RED)❌ No user activity data found!$(RESET)"; \
+	fi
+
+	@echo "$(CYAN)Checking event type distribution...$(RESET)"
+	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg --execute "SELECT event_type, COUNT(*) FROM warehouse.user_activity GROUP BY event_type"
+
+	@echo "$(CYAN)Checking sensor data...$(RESET)"
+	@sensor_count=$$(docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg --execute "SELECT COUNT(*) FROM warehouse.sensor_data" | grep -v "^_" | tr -d ' ' || echo "0")
+	@if [ "$$sensor_count" -gt 0 ]; then \
+		echo "$(GREEN)✅ Sensor data is present ($$sensor_count rows)$(RESET)"; \
+	else \
+		echo "$(RED)❌ No sensor data found!$(RESET)"; \
+	fi
+
+	@echo "$(CYAN)Checking sensor type distribution...$(RESET)"
+	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg --execute "SELECT sensor_type, AVG(sensor_value) FROM warehouse.sensor_data GROUP BY sensor_type"
+
+	@echo "$(BOLD)$(GREEN)✅ Data flow verification complete!$(RESET)"
+
+# 🚀 Run automated verification
+.PHONY: verify-demo
+verify-demo: smoketest
+	@echo "$(BOLD)$(GREEN)🚀 Running automated verification...$(RESET)"
+
+	@echo "$(BOLD)$(CYAN)Step 1: Checking all containers...$(RESET)"
+	@$(MAKE) -s smoketest
+
+	@echo "$(BOLD)$(CYAN)Step 2: Verifying Flink jobs...$(RESET)"
+	@echo "$(CYAN)Checking Flink job status...$(RESET)"
+	@job_count=$$(docker exec flink-jobmanager flink list -a | grep "RUNNING" | wc -l | tr -d ' ')
+	@if [ "$$job_count" -ge 2 ]; then \
+		echo "$(GREEN)✅ Flink jobs are running ($$job_count jobs)$(RESET)"; \
+	else \
+		echo "$(RED)❌ Not enough Flink jobs running! Expected at least 2, found $$job_count$(RESET)"; \
+		echo "$(YELLOW)⚠️ You may need to deploy the Flink jobs with 'make deploy-flink-jobs'$(RESET)"; \
+	fi
+
+	@echo "$(BOLD)$(CYAN)Step 3: Verifying data in Iceberg tables...$(RESET)"
+	@$(MAKE) -s verify-data-flow
+
+	@echo "$(BOLD)$(CYAN)Step 4: Checking MinIO storage...$(RESET)"
+	@echo "$(CYAN)Verifying warehouse bucket in MinIO...$(RESET)"
+	@if docker exec mc-setup /usr/bin/mc ls myminio/warehouse > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ Warehouse bucket exists in MinIO$(RESET)"; \
+		echo "$(CYAN)Listing table directories:$(RESET)"; \
+		docker exec mc-setup /usr/bin/mc ls myminio/warehouse; \
+	else \
+		echo "$(RED)❌ Warehouse bucket not found in MinIO!$(RESET)"; \
+	fi
+
+	@echo "$(BOLD)$(CYAN)Step 5: Checking Superset integration...$(RESET)"
+	@echo "$(CYAN)Verifying Superset is running...$(RESET)"
+	@if docker-compose ps superset | grep "Up" > /dev/null; then \
+		echo "$(GREEN)✅ Superset is running$(RESET)"; \
+		echo "$(YELLOW)ℹ️ Access Superset at http://localhost:8088 (admin/admin)$(RESET)"; \
+		echo "$(YELLOW)ℹ️ To complete Superset verification, manually check Trino connection and create datasets$(RESET)"; \
+	else \
+		echo "$(RED)❌ Superset is not running!$(RESET)"; \
+	fi
+
+	@echo "$(BOLD)$(GREEN)✅ Verification complete!$(RESET)"
+
 # 🎬 Run complete demo
 .PHONY: demo
 demo: build up
 	@echo "$(BOLD)$(MAGENTA)🎬 Running complete data pipeline demo...$(RESET)"
-	
+
 	@echo "$(BOLD)$(CYAN)Step 1: Waiting for services to start up...$(RESET)"
 	$(call wait-for-service,kafka,60)
-	$(call wait-for-service,kafka-ui,60)
 	$(call wait-for-service,minio,60)
 	$(call wait-for-service,flink-jobmanager,60)
-	$(call wait-for-service,flink-taskmanager,60)
-	$(call wait-for-service,mysql,60)
-	$(call wait-for-service,iceberg-rest,60)
 	$(call wait-for-service,trino-coordinator,60)
-	$(call wait-for-service,superset,60)
-	$(call wait-for-service,data-generator,60)
-	
-	@echo "$(BOLD)$(CYAN)Step 2: Validating all containers are running...$(RESET)"
-	@$(MAKE) smoketest
-	
-	@echo "$(BOLD)$(CYAN)Step 3: Waiting for Trino to be ready...$(RESET)"
-	@$(MAKE) wait-for-trino
-	
-	@echo "$(BOLD)$(CYAN)Step 4: Creating Iceberg tables in Trino...$(RESET)"
-	@$(MAKE) create-tables
-	
+
+	@echo "$(BOLD)$(CYAN)Step 2: Validating setup...$(RESET)"
+	$(MAKE) validate-setup
+
+	@echo "$(BOLD)$(CYAN)Step 3: Creating Iceberg tables in Trino...$(RESET)"
+	$(MAKE) wait-for-trino
+	$(MAKE) create-tables
+
+	@echo "$(BOLD)$(CYAN)Step 4: Deploying SQL scripts to Flink SQL Client...$(RESET)"
+	$(MAKE) deploy-sql-scripts
+
 	@echo "$(BOLD)$(CYAN)Step 5: Deploying Flink jobs...$(RESET)"
-	@$(MAKE) deploy-flink-jobs
-	
-	@echo "$(BOLD)$(CYAN)Step 6: Waiting for data to flow through the pipeline...$(RESET)"
-	@$(MAKE) wait-for-data
-	
-	@echo "$(BOLD)$(CYAN)Step 7: Running example queries to verify data...$(RESET)"
-	@echo "$(YELLOW)Querying user activity data:$(RESET)"
-	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg --execute "SELECT event_type, COUNT(*) FROM warehouse.user_activity GROUP BY event_type" || \
-		echo "$(BOLD)$(YELLOW)⚠️ Query failed. This might be expected if data hasn't been processed yet.$(RESET)"
-	
-	@echo "$(YELLOW)Querying sensor data:$(RESET)"
-	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg --execute "SELECT sensor_type, AVG(sensor_value) FROM warehouse.sensor_data GROUP BY sensor_type" || \
-		echo "$(BOLD)$(YELLOW)⚠️ Query failed. This might be expected if data hasn't been processed yet.$(RESET)"
-	
-	@echo "$(BOLD)$(CYAN)Step 8: Setting up Superset dashboards...$(RESET)"
-	@$(MAKE) setup-superset
-	
-	@echo "$(BOLD)$(GREEN)✅ Demo completed successfully!$(RESET)"
-	@echo "$(BOLD)$(YELLOW)You can access the following services:$(RESET)"
-	@echo "  $(YELLOW)Kafka UI:$(RESET)        http://localhost:8080"
-	@echo "  $(YELLOW)Minio Console:$(RESET)   http://localhost:9001 (minioadmin/minioadmin)"
-	@echo "  $(YELLOW)Flink Dashboard:$(RESET) http://localhost:8081"
-	@echo "  $(YELLOW)Trino UI:$(RESET)        http://localhost:8082"
-	@echo "  $(YELLOW)Superset:$(RESET)        http://localhost:8088 (admin/admin)"
+	$(MAKE) deploy-flink-jobs
+
+	@echo "$(BOLD)$(CYAN)Step 6: Waiting for data to be available...$(RESET)"
+	$(MAKE) wait-for-data
+
+	@echo "$(BOLD)$(GREEN)✅ Demo setup complete!$(RESET)"
+	@echo "$(YELLOW)You can now access the following services:$(RESET)"
+	@echo "  - Flink Dashboard: http://localhost:8081"
+	@echo "  - Minio Console: http://localhost:9001 (username: minioadmin, password: minioadmin)"
+	@echo "  - Trino UI: http://localhost:8082/ui/ (username: admin)"
+	@echo "  - Superset: http://localhost:8088 (username: admin, password: admin)"
+	@echo ""
+	@echo "$(YELLOW)To run SQL queries on the data, use:$(RESET)"
+	@echo "  docker exec -it trino-coordinator trino --server localhost:8080 --catalog iceberg"
+	@echo ""
+	@echo "$(YELLOW)To run Flink SQL scripts directly:$(RESET)"
+	@echo "  docker exec -it flink-sql-client ./bin/sql-client.sh -f /opt/flink-sql-client/scripts/user-activity-to-iceberg.sql"
+	@echo "  docker exec -it flink-sql-client ./bin/sql-client.sh -f /opt/flink-sql-client/scripts/sensor-data-to-iceberg.sql"

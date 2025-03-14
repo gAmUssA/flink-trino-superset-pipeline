@@ -1,0 +1,48 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base"
+  ],
+  "packageRules": [
+    {
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    },
+    {
+      "matchPackagePatterns": ["^org.apache.flink"],
+      "groupName": "Apache Flink packages"
+    },
+    {
+      "matchPackagePatterns": ["^org.apache.iceberg"],
+      "groupName": "Apache Iceberg packages"
+    },
+    {
+      "matchPackagePatterns": ["^com.fasterxml.jackson"],
+      "groupName": "Jackson packages"
+    }
+  ],
+  "docker": {
+    "enabled": true,
+    "pinDigests": true
+  },
+  "gradle": {
+    "enabled": true
+  },
+  "pip_requirements": {
+    "fileMatch": ["^requirements\\.txt$"]
+  },
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**"
+  ],
+  "labels": ["dependencies"],
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 10,
+  "schedule": ["every weekend"]
+}

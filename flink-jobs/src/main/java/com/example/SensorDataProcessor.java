@@ -1,114 +1,117 @@
 package com.example;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.flink.api.common.eventtime.WatermarkStrategy;
-import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.serialization.SimpleStringSchema;
-import org.apache.flink.connector.kafka.source.KafkaSource;
-import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.api.common.serialization.SimpleStringEncoder;
-import org.apache.flink.api.java.tuple.Tuple7;
-import org.apache.flink.connector.file.sink.FileSink;
-import org.apache.flink.core.fs.Path;
-import org.apache.flink.streaming.api.functions.sink.filesystem.rollingpolicies.DefaultRollingPolicy;
+import org.apache.flink.table.api.EnvironmentSettings;
+import org.apache.flink.table.api.Schema;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.TableDescriptor;
+import org.apache.flink.table.api.TableEnvironment;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Expressions;
+import org.apache.flink.types.Row;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import static org.apache.flink.table.api.Expressions.$;
 
 /**
- * Flink job to process sensor data from Kafka and write to Iceberg.
+ * Flink job to process sensor data from Kafka and write to Iceberg using Table API.
  */
 public class SensorDataProcessor {
     private static final Logger LOG = LoggerFactory.getLogger(SensorDataProcessor.class);
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public static void main(String[] args) throws Exception {
-        // Set up the streaming execution environment
-        final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        
-        // Configure Kafka source
-        KafkaSource<String> source = KafkaSource.<String>builder()
-                .setBootstrapServers("kafka:9092")
-                .setTopics("sensor-data")
-                .setGroupId("sensor-data-processor")
-                .setStartingOffsets(OffsetsInitializer.earliest())
-                .setValueOnlyDeserializer(new SimpleStringSchema())
+        // Set up the table environment
+        EnvironmentSettings settings = EnvironmentSettings.newInstance()
+                .inStreamingMode()
                 .build();
+        TableEnvironment tableEnv = TableEnvironment.create(settings);
 
-        // Read from Kafka
-        DataStream<String> kafkaStream = env.fromSource(
-                source,
-                WatermarkStrategy.noWatermarks(),
-                "Kafka Source"
+        // Configure Kafka source table
+        tableEnv.createTemporaryTable("sensor_source", TableDescriptor.forConnector("kafka")
+                .schema(Schema.newBuilder()
+                        .column("sensor_id", DataTypes.STRING())
+                        .column("sensor_type", DataTypes.STRING())
+                        .column("timestamp", DataTypes.TIMESTAMP(3))
+                        .column("location", DataTypes.ROW(
+                                DataTypes.FIELD("lat", DataTypes.DOUBLE()),
+                                DataTypes.FIELD("lon", DataTypes.DOUBLE()),
+                                DataTypes.FIELD("facility", DataTypes.STRING())
+                        ))
+                        .column("battery_level", DataTypes.DOUBLE())
+                        .column("reading", DataTypes.DOUBLE())
+                        .column("unit", DataTypes.STRING())
+                        .watermark("timestamp", "timestamp - INTERVAL '5' SECOND")
+                        .build())
+                .option("connector", "kafka")
+                .option("topic", "sensor-data")
+                .option("properties.bootstrap.servers", "kafka:9092")
+                .option("properties.group.id", "sensor-data-processor")
+                .option("scan.startup.mode", "earliest-offset")
+                .option("format", "json")
+                .option("json.ignore-parse-errors", "true")
+                .option("json.timestamp-format.standard", "ISO-8601")
+                .build());
+
+        // Configure Iceberg catalog
+        tableEnv.executeSql("CREATE CATALOG iceberg_catalog WITH (" +
+                "'type'='iceberg'," +
+                "'catalog-impl'='org.apache.iceberg.rest.RESTCatalog'," +
+                "'uri'='http://iceberg-rest:8181'," +
+                "'warehouse'='s3://warehouse/'," +
+                "'io-impl'='org.apache.iceberg.aws.s3.S3FileIO'," +
+                "'s3.endpoint'='http://minio:9000'," +
+                "'s3.path-style-access'='true'," +
+                "'client.region'='us-east-1'," +
+                "'s3.access-key-id'='minioadmin'," +
+                "'s3.secret-access-key'='minioadmin'" +
+                ")");
+
+        // Use the catalog and create database
+        tableEnv.executeSql("USE CATALOG iceberg_catalog");
+        tableEnv.executeSql("CREATE DATABASE IF NOT EXISTS db");
+        tableEnv.executeSql("USE db");
+
+        // Create the sink table
+        tableEnv.executeSql("CREATE TABLE IF NOT EXISTS sensor_sink (" +
+                "sensor_id STRING," +
+                "sensor_type STRING," +
+                "event_time TIMESTAMP(3)," +
+                "latitude DOUBLE," +
+                "longitude DOUBLE," +
+                "facility STRING," +
+                "battery_level DOUBLE," +
+                "reading DOUBLE," +
+                "unit STRING," +
+                "processing_time TIMESTAMP(3)," +
+                "PRIMARY KEY (sensor_id) NOT ENFORCED" +
+                ") WITH (" +
+                "'format' = 'parquet'," +
+                "'write-format' = 'parquet'" +
+                ")");
+
+        // Get the source table
+        Table sourceTable = tableEnv.from("sensor_source");
+
+        // Transform the data
+        Table resultTable = sourceTable.select(
+                $("sensor_id"),
+                $("sensor_type"),
+                $("timestamp").as("event_time"),
+                $("location.lat").as("latitude"),
+                $("location.lon").as("longitude"),
+                $("location.facility").as("facility"),
+                $("battery_level"),
+                $("reading"),
+                $("unit"),
+                Expressions.callSql("CURRENT_TIMESTAMP").as("processing_time")
         );
 
-        // Parse JSON and convert to Tuple7
-        DataStream<Tuple7<String, String, String, Double, Double, String, Double>> processedStream = 
-            kafkaStream.map(new MapFunction<String, Tuple7<String, String, String, Double, Double, String, Double>>() {
-                @Override
-                public Tuple7<String, String, String, Double, Double, String, Double> map(String value) throws Exception {
-                    JsonNode jsonNode = OBJECT_MAPPER.readTree(value);
-                    
-                    // Extract fields from JSON
-                    String sensorId = jsonNode.get("sensor_id").asText();
-                    String sensorType = jsonNode.get("sensor_type").asText();
-                    
-                    // Parse timestamp
-                    String timestampStr = jsonNode.get("timestamp").asText();
-                    
-                    // Extract location data
-                    JsonNode locationNode = jsonNode.get("location");
-                    Double latitude = locationNode.get("lat").asDouble();
-                    Double longitude = locationNode.get("lon").asDouble();
-                    String facility = locationNode.get("facility").asText();
-                    
-                    // Extract sensor value - changed from 'value' to 'reading' to match the data generator
-                    Double sensorValue = jsonNode.get("reading").asDouble();
-                    
-                    return new Tuple7<>(sensorId, sensorType, timestampStr, latitude, longitude, facility, sensorValue);
-                }
-            });
-        
-        // Configure file sink
-        final FileSink<Tuple7<String, String, String, Double, Double, String, Double>> sink = FileSink
-            .forRowFormat(new Path("file:///tmp/sensor_data"), 
-                new SimpleStringEncoder<Tuple7<String, String, String, Double, Double, String, Double>>() {
-                    public byte[] encode(Tuple7<String, String, String, Double, Double, String, Double> element) {
-                        return String.format("%s,%s,%s,%f,%f,%s,%f\n",
-                            element.f0,  // sensor_id
-                            element.f1,  // sensor_type
-                            element.f2,  // timestamp
-                            element.f3,  // latitude
-                            element.f4,  // longitude
-                            element.f5,  // facility
-                            element.f6   // sensor_value
-                        ).getBytes();
-                    }
-                })
-            .withRollingPolicy(
-                DefaultRollingPolicy.builder()
-                    .withRolloverInterval(TimeUnit.MINUTES.toMillis(15))
-                    .withInactivityInterval(TimeUnit.MINUTES.toMillis(5))
-                    .withMaxPartSize(1024 * 1024 * 1024)
-                    .build())
-            .build();
-        
-        // Add sink to the pipeline
-        processedStream.sinkTo(sink);
-        
-        // Also print the data to stdout for debugging
-        processedStream.print();
+        // Print the result schema for debugging
+        LOG.info("Result schema: {}", resultTable.getSchema());
 
-        // Execute the Flink job
-        env.execute("Sensor Data Processor");
+        // Insert the data into the sink table
+        resultTable.executeInsert("sensor_sink");
+
+        LOG.info("Sensor Data Processor job submitted");
     }
 }

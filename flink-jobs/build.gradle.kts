@@ -30,7 +30,7 @@ dependencies {
     implementation("org.apache.flink:flink-table-planner-loader:$flinkVersion")
 
     // Flink Kafka connector
-    implementation("org.apache.flink:flink-connector-kafka:$kafkaConnectorVersion")
+    implementation("org.apache.flink:flink-sql-connector-kafka:$kafkaConnectorVersion")
 
     // Flink File connector
     implementation("org.apache.flink:flink-connector-files:$flinkVersion")
@@ -137,6 +137,9 @@ tasks.register<Jar>("messageCounterJobJar") {
 
     // Include all dependencies in the jar
     from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
+
+    // Explicitly include the Kafka connector
+    from(configurations.runtimeClasspath.get().filter { it.name.contains("flink-sql-connector-kafka") })
 
     // Exclude META-INF signatures to avoid security exceptions
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")

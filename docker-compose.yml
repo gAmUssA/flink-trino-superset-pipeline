@@ -71,7 +71,9 @@ services:
 
   # Flink JobManager - Manages Flink jobs
   flink-jobmanager:
-    image: flink:1.20.0-java17
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: flink-jobmanager
     ports:
       - "8081:8081"
@@ -101,7 +103,9 @@ services:
 
   # Flink TaskManager - Executes Flink tasks
   flink-taskmanager:
-    image: flink:1.20.0-java17
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: flink-taskmanager
     depends_on:
       - flink-jobmanager
@@ -195,7 +199,9 @@ services:
 
   # Flink SQL Client - For executing SQL queries on Flink
   flink-sql-client:
-    image: flink:1.20.0-java17
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: flink-sql-client
     command: bin/sql-client.sh
     depends_on:

@@ -32,21 +32,36 @@ endef
 help:
 	@echo "$(BOLD)$(CYAN)🚀 Flink-Trino-Superset Pipeline$(RESET)"
 	@echo "$(BOLD)$(GREEN)Available targets:$(RESET)"
+
+	@echo "$(BOLD)$(BLUE)📌 General:$(RESET)"
 	@echo "  $(YELLOW)help$(RESET)              - Show this help message"
-	@echo "  $(YELLOW)build$(RESET)             - Build all components"
-	@echo "  $(YELLOW)up$(RESET)                - Start all services"
-	@echo "  $(YELLOW)down$(RESET)              - Stop all services"
-	@echo "  $(YELLOW)clean$(RESET)             - Clean up build artifacts"
-	@echo "  $(YELLOW)logs$(RESET)              - Show logs from all services"
-	@echo "  $(YELLOW)smoketest$(RESET)         - Validate startup of all containers"
-	@echo "  $(YELLOW)validate-setup$(RESET)    - Validate SQL scripts and Java code setup"
-	@echo "  $(YELLOW)build-flink-jobs$(RESET)  - Build Flink jobs"
-	@echo "  $(YELLOW)deploy-flink-jobs$(RESET) - Deploy Flink jobs to the cluster"
-	@echo "  $(YELLOW)deploy-sql-scripts$(RESET) - Deploy SQL scripts to Flink SQL Client"
-	@echo "  $(YELLOW)create-tables$(RESET)     - Create Iceberg tables in Trino"
-	@echo "  $(YELLOW)setup-superset$(RESET)    - Set up Superset dashboards"
 	@echo "  $(YELLOW)urls$(RESET)              - Show all service URLs and credentials"
 	@echo "  $(YELLOW)demo$(RESET)              - Run complete demo (build, start, validate, deploy)"
+
+	@echo "$(BOLD)$(BLUE)🏗️ Build:$(RESET)"
+	@echo "  $(YELLOW)build$(RESET)             - Build all components"
+	@echo "  $(YELLOW)build-flink-jobs$(RESET)  - Build all Flink jobs"
+	@echo "  $(YELLOW)clean$(RESET)             - Clean up build artifacts"
+
+	@echo "$(BOLD)$(BLUE)🐳 Docker Services:$(RESET)"
+	@echo "  $(YELLOW)up$(RESET)                - Start all services"
+	@echo "  $(YELLOW)down$(RESET)              - Stop all services"
+	@echo "  $(YELLOW)logs$(RESET)              - Show logs from all services"
+
+	@echo "$(BOLD)$(BLUE)🔍 Validation:$(RESET)"
+	@echo "  $(YELLOW)smoketest$(RESET)         - Validate startup of all containers"
+	@echo "  $(YELLOW)validate-setup$(RESET)    - Validate SQL scripts and Java code setup"
+
+	@echo "$(BOLD)$(BLUE)🚀 Flink Jobs:$(RESET)"
+	@echo "  $(YELLOW)deploy-flink-jobs$(RESET) - Deploy all Flink jobs to the cluster"
+	@echo "  $(YELLOW)deploy-user-activity$(RESET) - Deploy only the UserActivityProcessor job"
+	@echo "  $(YELLOW)deploy-sensor-data$(RESET) - Deploy only the SensorDataProcessor job"
+	@echo "  $(YELLOW)deploy-message-counter$(RESET) - Deploy only the MessageCounterJob"
+	@echo "  $(YELLOW)deploy-sql-scripts$(RESET) - Deploy SQL scripts to Flink SQL Client"
+
+	@echo "$(BOLD)$(BLUE)📊 Data Management:$(RESET)"
+	@echo "  $(YELLOW)create-tables$(RESET)     - Create Iceberg tables in Trino"
+	@echo "  $(YELLOW)setup-superset$(RESET)    - Set up Superset dashboards"
 
 # 🏗️ Build all components
 .PHONY: build
@@ -95,26 +110,40 @@ build-flink-jobs:
 
 # 🚀 Deploy Flink jobs to the cluster
 .PHONY: deploy-flink-jobs
-deploy-flink-jobs: build-flink-jobs
-	@echo "$(BOLD)$(GREEN)🚀 Deploying Flink jobs to the cluster...$(RESET)"
+deploy-flink-jobs:
+	@echo "$(BOLD)$(GREEN)🚀 Deploying all Flink jobs to the cluster...$(RESET)"
+	@echo "$(YELLOW)Note: It's recommended to deploy jobs separately using the specific targets below.$(RESET)"
+	$(MAKE) deploy-user-activity
+	$(MAKE) deploy-sensor-data
+	$(MAKE) deploy-message-counter
+
+# 🚀 Deploy only the UserActivityProcessor
+.PHONY: deploy-user-activity
+deploy-user-activity:
+	@echo "$(BOLD)$(GREEN)🚀 Building and deploying UserActivityProcessor...$(RESET)"
 	@if ! docker-compose ps flink-jobmanager | grep "Up" > /dev/null; then \
 		echo "$(BOLD)$(RED)❌ Flink JobManager is not running!$(RESET)"; \
 		echo "$(YELLOW)Please start the services with 'make up' and try again.$(RESET)"; \
 		exit 1; \
 	fi
-	@if [ ! -f "flink-jobs/build/libs/user-activity-processor-1.0-SNAPSHOT.jar" ] || [ ! -f "flink-jobs/build/libs/sensor-data-processor-1.0-SNAPSHOT.jar" ] || [ ! -f "flink-jobs/build/libs/message-counter-job-1.0-SNAPSHOT.jar" ]; then \
-		echo "$(BOLD)$(YELLOW)⚠️ Flink job JARs not found, rebuilding...$(RESET)"; \
-		$(MAKE) build-flink-jobs; \
-	fi
+	cd flink-jobs && ./gradlew userActivityProcessorJar
 	docker cp flink-jobs/build/libs/user-activity-processor-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
-	docker cp flink-jobs/build/libs/sensor-data-processor-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
-	docker cp flink-jobs/build/libs/message-counter-job-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
 	docker exec flink-jobmanager flink run -c com.example.UserActivityProcessor /opt/flink/usrlib/user-activity-processor-1.0-SNAPSHOT.jar || \
 		echo "$(BOLD)$(YELLOW)⚠️ There was an issue deploying the UserActivityProcessor job. This might be expected if the job is already running.$(RESET)"
+
+# 🚀 Deploy only the SensorDataProcessor
+.PHONY: deploy-sensor-data
+deploy-sensor-data:
+	@echo "$(BOLD)$(GREEN)🚀 Building and deploying SensorDataProcessor...$(RESET)"
+	@if ! docker-compose ps flink-jobmanager | grep "Up" > /dev/null; then \
+		echo "$(BOLD)$(RED)❌ Flink JobManager is not running!$(RESET)"; \
+		echo "$(YELLOW)Please start the services with 'make up' and try again.$(RESET)"; \
+		exit 1; \
+	fi
+	cd flink-jobs && ./gradlew sensorDataProcessorJar
+	docker cp flink-jobs/build/libs/sensor-data-processor-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
 	docker exec flink-jobmanager flink run -c com.example.SensorDataProcessor /opt/flink/usrlib/sensor-data-processor-1.0-SNAPSHOT.jar || \
 		echo "$(BOLD)$(YELLOW)⚠️ There was an issue deploying the SensorDataProcessor job. This might be expected if the job is already running.$(RESET)"
-	docker exec flink-jobmanager flink run -c com.example.MessageCounterJob /opt/flink/usrlib/message-counter-job-1.0-SNAPSHOT.jar || \
-		echo "$(BOLD)$(YELLOW)⚠️ There was an issue deploying the MessageCounterJob job. This might be expected if the job is already running.$(RESET)"
 
 # 🚀 Deploy only the MessageCounterJob
 .PHONY: deploy-message-counter
@@ -127,7 +156,7 @@ deploy-message-counter:
 	fi
 	cd flink-jobs && ./gradlew messageCounterJobJar
 	docker cp flink-jobs/build/libs/message-counter-job-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
-	docker exec flink-jobmanager flink run -c com.example.MessageCounterJob /opt/flink/usrlib/message-counter-job-1.0-SNAPSHOT.jar || \
+	@docker exec flink-jobmanager flink run -c com.example.MessageCounterJob /opt/flink/usrlib/message-counter-job-1.0-SNAPSHOT.jar || \
 		echo "$(BOLD)$(YELLOW)⚠️ There was an issue deploying the MessageCounterJob job. This might be expected if the job is already running.$(RESET)"
 
 # 📝 Deploy SQL scripts to Flink SQL Client
@@ -268,6 +297,21 @@ validate-setup:
 .PHONY: setup-superset
 setup-superset:
 	@echo "$(BOLD)$(GREEN)📈 Setting up Superset dashboards...$(RESET)"
+
+	@echo "$(CYAN)Checking if Superset is running...$(RESET)"
+	@if ! docker-compose ps superset | grep "Up" > /dev/null; then \
+		echo "$(BOLD)$(RED)❌ Superset is not running!$(RESET)"; \
+		echo "$(YELLOW)Please start the services with 'make up' and try again.$(RESET)"; \
+		exit 1; \
+	fi
+
+	@echo "$(CYAN)Waiting for Superset to be ready...$(RESET)"
+	$(call wait-for-service,superset,60)
+
+	@echo "$(CYAN)Initializing Superset...$(RESET)"
+	@docker exec -it superset /app/init_superset.sh
+
+	@echo "$(GREEN)✅ Superset has been initialized!$(RESET)"
 	@echo "$(YELLOW)Please access Superset at http://localhost:8088 and log in with admin/admin$(RESET)"
 
 # 🔗 Show all service URLs and credentials
@@ -432,7 +476,10 @@ demo: build up
 	@echo "$(BOLD)$(CYAN)Step 5: Deploying Flink jobs...$(RESET)"
 	$(MAKE) deploy-flink-jobs
 
-	@echo "$(BOLD)$(CYAN)Step 6: Waiting for data to be available...$(RESET)"
+	@echo "$(BOLD)$(CYAN)Step 6: Setting up Superset...$(RESET)"
+	$(MAKE) setup-superset
+
+	@echo "$(BOLD)$(CYAN)Step 7: Waiting for data to be available...$(RESET)"
 	$(MAKE) wait-for-data
 
 	@echo "$(BOLD)$(GREEN)✅ Demo setup complete!$(RESET)"

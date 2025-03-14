@@ -1,4 +1,4 @@
-FROM flink:1.20.0-java17
+FROM flink:1.20.1-java17@sha256:bf1af6406c4f4ad8faa46efe2b3d0a0bf811d1034849c42c1e3484712bc83505
 
 # Set environment variables
 ENV FLINK_VERSION=1.20.0

@@ -1,7 +1,7 @@
 services:
   # Kafka - Message broker for data ingestion in KRaft mode
   kafka:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:3.9.0@sha256:fbc7d7c428e3755cf36518d4976596002477e4c052d1f80b5b9eafd06d0fff2f
     hostname: kafka
     ports:
       - "9092:9092"
@@ -33,7 +33,7 @@ services:
       - pipeline-network
   # Minio - S3-compatible storage for Iceberg data
   minio:
-    image: minio/minio:latest
+    image: minio/minio:latest@sha256:46b3009bf7041eefbd90bd0d2b38c6ddc24d20a35d609551a1802c558c1c958f
     container_name: minio
     ports:
       - "9000:9000"
@@ -54,7 +54,7 @@ services:
 
   # Create buckets in Minio
   mc-setup:
-    image: minio/mc:latest
+    image: minio/mc:latest@sha256:470f5546b596e16c7816b9c3fa7a78ce4076bb73c2c73f7faeec0c8043923123
     container_name: mc-setup
     depends_on:
       - minio
@@ -129,7 +129,7 @@ services:
 
   # Iceberg REST Catalog - Metadata service for Iceberg tables
   iceberg-rest:
-    image: tabulario/iceberg-rest
+    image: tabulario/iceberg-rest@sha256:3b7d31bdfec626b68e97531c9778a1b9119659e456fe28545a49f6aa6a9ce472
     container_name: iceberg-rest
     ports:
       - "8181:8181"
@@ -147,7 +147,7 @@ services:
 
   # Trino Coordinator - SQL query engine
   trino-coordinator:
-    image: trinodb/trino:latest
+    image: trinodb/trino:latest@sha256:cc9cab2afd71637176e94c729a05862d1b2d07f5b13b109f1ae041d3e78428dd
     container_name: trino-coordinator
     ports:
       - "8082:8080"

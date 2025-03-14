@@ -1,0 +1,84 @@
+= Data Generator 🚀
+
+This component generates sample data and sends it to Kafka topics for the Flink-Trino-Superset data pipeline.
+
+== Features ✨
+
+- Generates realistic user activity data (page views, clicks, searches, purchases, etc.)
+- Generates IoT sensor data (temperature, humidity, pressure, etc.)
+- Uses Confluent Kafka library for reliable message delivery
+- Configurable using property files for both cloud and local environments
+
+== Configuration ⚙️
+
+The data generator can be configured using property files located in the `config` directory:
+
+- `config/local/` - Configuration for local development
+- `config/cloud/` - Configuration for Confluent Cloud
+
+=== Environment Selection 🌍
+
+Set the `KAFKA_ENV` environment variable to choose which configuration to use:
+
+[source,bash]
+----
+# For local development
+export KAFKA_ENV=local
+
+# For Confluent Cloud
+export KAFKA_ENV=cloud
+----
+
+In Docker, this is set in the `docker-compose.yml` file or in the `Dockerfile`.
+
+=== Kafka Configuration 📝
+
+Kafka connection settings are defined in `kafka.properties`:
+
+- `bootstrap.servers` - Kafka bootstrap servers
+- `security.protocol` - Security protocol (PLAINTEXT for local, SASL_SSL for cloud)
+- `sasl.mechanism` - SASL mechanism (for cloud)
+- `sasl.jaas.config` - JAAS configuration (for cloud)
+- `schema.registry.url` - Schema Registry URL
+
+=== Topic Configuration 📊
+
+Kafka topic names are defined in `topics.properties`:
+
+- `topic.user-activity` - Topic for user activity data
+- `topic.sensor-data` - Topic for sensor data
+
+== Running Locally 💻
+
+[source,bash]
+----
+# Install dependencies
+pip install -r requirements.txt
+
+# Run with local configuration
+export KAFKA_ENV=local
+python data_generator.py
+
+# Run with cloud configuration
+export KAFKA_ENV=cloud
+python data_generator.py
+----
+
+== Running with Docker 🐳
+
+[source,bash]
+----
+# Build the Docker image
+docker build -t data-generator .
+
+# Run with local configuration
+docker run -e KAFKA_ENV=local -v $(pwd)/../config:/app/config data-generator
+
+# Run with cloud configuration
+docker run -e KAFKA_ENV=cloud -v $(pwd)/../config:/app/config data-generator
+----
+
+== Docker Compose 🔄
+
+The data generator is included in the project's `docker-compose.yml` file.
+To switch between local and cloud configurations, edit the `KAFKA_ENV` environment variable in the `data-generator` service.

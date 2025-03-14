@@ -195,6 +195,57 @@ def delivery_callback(err, msg):
     else:
         logger.debug(f'Message delivered to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}')
 
+def ensure_topics_exist(admin_client, topics_config, topic_names):
+    """Check if topics exist and create them if they don't"""
+    # Get existing topics
+    existing_topics = admin_client.list_topics(timeout=10).topics
+    logger.info(f"Existing topics: {', '.join(existing_topics.keys())}")
+
+    # Check which topics need to be created
+    topics_to_create = []
+    for topic_name in topic_names:
+        if topic_name not in existing_topics:
+            # Get topic configuration from topics_config
+            topic_key = next((k for k, v in topics_config.items() if v == topic_name), None)
+            if topic_key:
+                # Get partitions and replicas from config
+                partitions_key = f"{topic_key}.partitions"
+                replicas_key = f"{topic_key}.replicas"
+
+                partitions = int(topics_config.get(partitions_key, 1))
+                replicas = int(topics_config.get(replicas_key, 1))
+
+                logger.info(f"Topic {topic_name} does not exist. Creating with {partitions} partitions and {replicas} replicas.")
+                topics_to_create.append(NewTopic(
+                    topic_name,
+                    num_partitions=partitions,
+                    replication_factor=replicas
+                ))
+            else:
+                logger.warning(f"Topic {topic_name} not found in configuration. Using defaults.")
+                topics_to_create.append(NewTopic(
+                    topic_name,
+                    num_partitions=1,
+                    replication_factor=1
+                ))
+
+    # Create topics if needed
+    if topics_to_create:
+        try:
+            futures = admin_client.create_topics(topics_to_create)
+
+            # Wait for each creation to finish
+            for topic, future in futures.items():
+                try:
+                    future.result()  # The result itself is None
+                    logger.info(f"Topic {topic} created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create topic {topic}: {e}")
+        except Exception as e:
+            logger.error(f"Failed to create topics: {e}")
+    else:
+        logger.info("All required topics already exist")
+
 def main():
     """Main function to generate and send data to Kafka"""
     # Get environment type from environment variable or default to local
@@ -215,8 +266,61 @@ def main():
         logger.info(f"Attempting to connect to Kafka at {bootstrap_servers}...")
         producer = create_kafka_producer(kafka_config)
 
+        # Create an AdminClient to check and create topics
+        admin_config = kafka_config.copy()
+        admin_client = AdminClient(admin_config)
+
         # Create topics if they don't exist
         logger.info(f"Ensuring topics exist: {user_activity_topic}, {sensor_data_topic}")
+
+        # Get existing topics
+        existing_topics = admin_client.list_topics(timeout=10).topics
+        logger.info(f"Existing topics: {', '.join(existing_topics.keys())}")
+
+        # Check which topics need to be created
+        topics_to_create = []
+        for topic_name in [user_activity_topic, sensor_data_topic]:
+            if topic_name not in existing_topics:
+                # Get topic configuration from topics_config
+                topic_key = next((k for k, v in topics_config.items() if v == topic_name), None)
+                if topic_key:
+                    # Get partitions and replicas from config
+                    partitions_key = f"{topic_key}.partitions"
+                    replicas_key = f"{topic_key}.replicas"
+
+                    partitions = int(topics_config.get(partitions_key, 1))
+                    replicas = int(topics_config.get(replicas_key, 1))
+
+                    logger.info(f"Topic {topic_name} does not exist. Creating with {partitions} partitions and {replicas} replicas.")
+                    topics_to_create.append(NewTopic(
+                        topic_name,
+                        num_partitions=partitions,
+                        replication_factor=replicas
+                    ))
+                else:
+                    logger.warning(f"Topic {topic_name} not found in configuration. Using defaults.")
+                    topics_to_create.append(NewTopic(
+                        topic_name,
+                        num_partitions=1,
+                        replication_factor=1
+                    ))
+
+        # Create topics if needed
+        if topics_to_create:
+            try:
+                futures = admin_client.create_topics(topics_to_create)
+
+                # Wait for each creation to finish
+                for topic, future in futures.items():
+                    try:
+                        future.result()  # The result itself is None
+                        logger.info(f"Topic {topic} created successfully")
+                    except Exception as e:
+                        logger.error(f"Failed to create topic {topic}: {e}")
+            except Exception as e:
+                logger.error(f"Failed to create topics: {e}")
+        else:
+            logger.info("All required topics already exist")
 
         # Main data generation loop
         logger.info("Starting data generation")

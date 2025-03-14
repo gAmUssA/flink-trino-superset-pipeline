@@ -122,7 +122,35 @@ This will:
 2. Copy the JAR files to the Flink JobManager
 3. Submit the jobs to Flink
 
-=== 5. Set Up Superset
+=== 5. Configure Data Generator Environment
+
+The data generator supports both local and cloud (Confluent Cloud) Kafka environments. By default, it uses the local configuration.
+
+To switch between environments:
+
+1. *Using Docker Compose*: Edit the `KAFKA_ENV` environment variable in `docker-compose.yml`:
+
+[source,yaml]
+----
+data-generator:
+  environment:
+    # Use 'local' for local development or 'cloud' for Confluent Cloud
+    KAFKA_ENV: local  # Change to 'cloud' for Confluent Cloud
+----
+
+2. *Using Environment Variable*: Set the `KAFKA_ENV` environment variable when running the container:
+
+[source,bash]
+----
+docker-compose run -e KAFKA_ENV=cloud data-generator
+----
+
+The configuration files are located in the `config/` directory:
+
+* `config/local/` - Configuration for local Kafka
+* `config/cloud/` - Configuration for Confluent Cloud
+
+=== 6. Set Up Superset
 
 [source,bash]
 ----
@@ -167,10 +195,17 @@ Create datasets and dashboards:
 [source]
 ----
 .
-├── data-generator/              # Data generator application
+├── data-generator/              # Data generator application (uses Confluent Kafka library)
 │   ├── Dockerfile               # Docker image definition
 │   ├── requirements.txt         # Python dependencies
-│   └── data_generator.py        # Data generator script
+│   └── data_generator.py        # Data generator script (configurable via property files)
+├── config/                      # Configuration files
+│   ├── cloud/                   # Cloud environment configuration
+│   │   ├── kafka.properties     # Confluent Cloud Kafka configuration
+│   │   └── topics.properties    # Kafka topic names for cloud
+│   └── local/                   # Local environment configuration
+│       ├── kafka.properties     # Local Kafka configuration
+│       └── topics.properties    # Kafka topic names for local
 ├── docker-compose.yml           # Docker Compose configuration
 ├── flink-jobs/                  # Flink processing jobs
 │   ├── build.gradle.kts         # Gradle build configuration

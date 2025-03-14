@@ -62,7 +62,7 @@ up:
 		echo "$(YELLOW)Please start Docker and try again.$(RESET)"; \
 		exit 1; \
 	fi
-	docker-compose up -d
+	docker-compose up -d --build
 
 # 🛑 Stop all services
 .PHONY: down
@@ -102,16 +102,33 @@ deploy-flink-jobs: build-flink-jobs
 		echo "$(YELLOW)Please start the services with 'make up' and try again.$(RESET)"; \
 		exit 1; \
 	fi
-	@if [ ! -f "flink-jobs/build/libs/user-activity-processor-1.0-SNAPSHOT.jar" ] || [ ! -f "flink-jobs/build/libs/sensor-data-processor-1.0-SNAPSHOT.jar" ]; then \
+	@if [ ! -f "flink-jobs/build/libs/user-activity-processor-1.0-SNAPSHOT.jar" ] || [ ! -f "flink-jobs/build/libs/sensor-data-processor-1.0-SNAPSHOT.jar" ] || [ ! -f "flink-jobs/build/libs/message-counter-job-1.0-SNAPSHOT.jar" ]; then \
 		echo "$(BOLD)$(YELLOW)⚠️ Flink job JARs not found, rebuilding...$(RESET)"; \
 		$(MAKE) build-flink-jobs; \
 	fi
 	docker cp flink-jobs/build/libs/user-activity-processor-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
 	docker cp flink-jobs/build/libs/sensor-data-processor-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
+	docker cp flink-jobs/build/libs/message-counter-job-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
 	docker exec flink-jobmanager flink run -c com.example.UserActivityProcessor /opt/flink/usrlib/user-activity-processor-1.0-SNAPSHOT.jar || \
 		echo "$(BOLD)$(YELLOW)⚠️ There was an issue deploying the UserActivityProcessor job. This might be expected if the job is already running.$(RESET)"
 	docker exec flink-jobmanager flink run -c com.example.SensorDataProcessor /opt/flink/usrlib/sensor-data-processor-1.0-SNAPSHOT.jar || \
 		echo "$(BOLD)$(YELLOW)⚠️ There was an issue deploying the SensorDataProcessor job. This might be expected if the job is already running.$(RESET)"
+	docker exec flink-jobmanager flink run -c com.example.MessageCounterJob /opt/flink/usrlib/message-counter-job-1.0-SNAPSHOT.jar || \
+		echo "$(BOLD)$(YELLOW)⚠️ There was an issue deploying the MessageCounterJob job. This might be expected if the job is already running.$(RESET)"
+
+# 🚀 Deploy only the MessageCounterJob
+.PHONY: deploy-message-counter
+deploy-message-counter:
+	@echo "$(BOLD)$(GREEN)🚀 Building and deploying MessageCounterJob...$(RESET)"
+	@if ! docker-compose ps flink-jobmanager | grep "Up" > /dev/null; then \
+		echo "$(BOLD)$(RED)❌ Flink JobManager is not running!$(RESET)"; \
+		echo "$(YELLOW)Please start the services with 'make up' and try again.$(RESET)"; \
+		exit 1; \
+	fi
+	cd flink-jobs && ./gradlew messageCounterJobJar
+	docker cp flink-jobs/build/libs/message-counter-job-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
+	docker exec flink-jobmanager flink run -c com.example.MessageCounterJob /opt/flink/usrlib/message-counter-job-1.0-SNAPSHOT.jar || \
+		echo "$(BOLD)$(YELLOW)⚠️ There was an issue deploying the MessageCounterJob job. This might be expected if the job is already running.$(RESET)"
 
 # 📝 Deploy SQL scripts to Flink SQL Client
 .PHONY: deploy-sql-scripts

@@ -24,7 +24,7 @@ dependencies {
     implementation("org.apache.flink:flink-table-api-java-bridge:$flinkVersion")
     implementation("org.apache.flink:flink-table-common:$flinkVersion")
     implementation("org.apache.flink:flink-runtime:$flinkVersion")
-    
+
     // Flink Table API dependencies
     implementation("org.apache.flink:flink-table-runtime:$flinkVersion")
     implementation("org.apache.flink:flink-table-planner-loader:$flinkVersion")
@@ -42,7 +42,7 @@ dependencies {
     implementation("org.apache.iceberg:iceberg-flink-runtime-1.20:$icebergVersion")
     implementation("org.apache.iceberg:iceberg-aws:$icebergVersion")
     implementation("org.apache.iceberg:iceberg-core:$icebergVersion")
-    
+
     // AWS S3 dependencies
     implementation("org.apache.flink:flink-s3-fs-hadoop:$flinkVersion")
     implementation("org.apache.hadoop:hadoop-aws:3.3.6")
@@ -71,15 +71,15 @@ tasks.jar {
     manifest {
         attributes["Main-Class"] = "com.example.UserActivityProcessor"
     }
-    
+
     // Include all dependencies in the jar
     from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
-    
+
     // Exclude META-INF signatures to avoid security exceptions
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
-    
+
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    
+
     // Enable zip64 extension to support more than 65535 entries
     isZip64 = true
 }
@@ -90,17 +90,17 @@ tasks.register<Jar>("sensorDataProcessorJar") {
     manifest {
         attributes["Main-Class"] = "com.example.SensorDataProcessor"
     }
-    
+
     from(sourceSets.main.get().output)
-    
+
     // Include all dependencies in the jar
     from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
-    
+
     // Exclude META-INF signatures to avoid security exceptions
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
-    
+
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    
+
     // Enable zip64 extension to support more than 65535 entries
     isZip64 = true
 }
@@ -111,22 +111,43 @@ tasks.register<Jar>("userActivityProcessorJar") {
     manifest {
         attributes["Main-Class"] = "com.example.UserActivityProcessor"
     }
-    
+
     from(sourceSets.main.get().output)
-    
+
     // Include all dependencies in the jar
     from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
-    
+
     // Exclude META-INF signatures to avoid security exceptions
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
-    
+
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    
+
+    // Enable zip64 extension to support more than 65535 entries
+    isZip64 = true
+}
+
+// Create a task for building the MessageCounterJob jar
+tasks.register<Jar>("messageCounterJobJar") {
+    archiveBaseName.set("message-counter-job")
+    manifest {
+        attributes["Main-Class"] = "com.example.MessageCounterJob"
+    }
+
+    from(sourceSets.main.get().output)
+
+    // Include all dependencies in the jar
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
+
+    // Exclude META-INF signatures to avoid security exceptions
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
     // Enable zip64 extension to support more than 65535 entries
     isZip64 = true
 }
 
 // Add a task to build all jars
 tasks.register("buildAllJars") {
-    dependsOn("jar", "userActivityProcessorJar", "sensorDataProcessorJar")
+    dependsOn("jar", "userActivityProcessorJar", "sensorDataProcessorJar", "messageCounterJobJar")
 }

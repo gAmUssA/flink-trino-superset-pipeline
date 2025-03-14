@@ -33,7 +33,7 @@ flowchart LR
     D -->|Stores Tables| E[Trino]
     E -->|Queries Data| F[Superset]
     F -->|Visualizes| G[Dashboards]
-    
+
     style A fill:#f9d5e5,stroke:#333,stroke-width:2px
     style B fill:#eeeeee,stroke:#333,stroke-width:2px
     style C fill:#d5e8f9,stroke:#333,stroke-width:2px
@@ -196,6 +196,22 @@ Create datasets and dashboards:
 ├── requirements.adoc            # Project requirements
 └── README.adoc                  # Project documentation
 ----
+
+== 🔄 Dependency Management
+
+This project uses https://docs.renovatebot.com/[Renovate] for automated dependency management. Renovate will automatically create pull requests to update dependencies in the project.
+
+=== Key Features
+
+* *Docker Updates*: Automatically updates Docker images with minor and patch versions
+* *Package Grouping*: Related packages (Flink, Iceberg, Jackson) are grouped together
+* *Dependency Types*:
+** Java/Kotlin dependencies via Gradle
+** Python dependencies in requirements.txt files
+** Docker images in docker-compose.yml
+* *Schedule*: Updates are scheduled to run on weekends
+
+The configuration is stored in both `renovate.json` and `.github/renovate.json` files.
 
 == 🔧 Troubleshooting
 

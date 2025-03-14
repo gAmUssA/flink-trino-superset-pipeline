@@ -1,4 +1,4 @@
-FROM apache/superset:latest
+FROM apache/superset:latest@sha256:41d888e2374b4f0f89dd46e06227248c2fdeaf32ae646b1ed109c29782646c4b
 
 # Install system dependencies required for building Python packages
 USER root

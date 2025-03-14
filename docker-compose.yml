@@ -160,7 +160,9 @@ services:
 
   # Superset - Data visualization
   superset:
-    image: apache/superset:latest
+    build:
+      context: ./superset
+      dockerfile: Dockerfile
     container_name: superset
     ports:
       - "8088:8088"
@@ -170,28 +172,6 @@ services:
       - ADMIN_PASSWORD=admin
       - SUPERSET_SECRET_KEY="pmFmur1eluMiQDoZA+cGHhY/cA8+0+Ko7EZi5afhXWlH1oH/rQkVHNVOY1hRXAUi"
       - TALISMAN_ENABLED="False"
-    volumes:
-      - superset-data:/app/superset_home
-    networks:
-      - pipeline-network
-
-  # Superset initialization
-  superset-init:
-    image: apache/superset:latest
-    container_name: superset-init
-    depends_on:
-      - superset
-    environment:
-      - ADMIN_USERNAME=admin
-      - ADMIN_EMAIL=admin@superset.com
-      - ADMIN_PASSWORD=admin
-    command: >
-      bash -c "
-      superset fab create-admin --username admin --firstname Superset --lastname Admin --email admin@superset.com --password admin &&
-      superset db upgrade &&
-      superset init &&
-      superset set-database-uri -d trino -u trino://admin@trino-coordinator:8080/iceberg/warehouse
-      "
     volumes:
       - superset-data:/app/superset_home
     networks:

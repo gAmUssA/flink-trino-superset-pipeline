@@ -50,7 +50,7 @@ dependencies {
     implementation("software.amazon.awssdk:s3:2.25.12")
 
     // Logging
-    implementation("org.slf4j:slf4j-api:2.0.12")
+    implementation("org.slf4j:slf4j-api:2.0.17")
     implementation("ch.qos.logback:logback-classic:1.4.14")
 
     // Jackson for JSON processing

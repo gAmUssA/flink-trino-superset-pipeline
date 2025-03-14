@@ -1,48 +1,72 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:base"
+    "config:recommended"
   ],
   "packageRules": [
     {
-      "matchDatasources": ["docker"],
-      "matchUpdateTypes": ["major"],
+      "matchCategories": [
+        "docker"
+      ],
+      "enabled": true,
+      "pinDigests": true
+    },
+    {
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
       "enabled": false
     },
     {
-      "matchDatasources": ["docker"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
       "automerge": true
     },
     {
-      "matchPackagePatterns": ["^org.apache.flink"],
-      "groupName": "Apache Flink packages"
+      "groupName": "Apache Flink packages",
+      "matchPackageNames": [
+        "/^org.apache.flink/"
+      ]
     },
     {
-      "matchPackagePatterns": ["^org.apache.iceberg"],
-      "groupName": "Apache Iceberg packages"
+      "groupName": "Apache Iceberg packages",
+      "matchPackageNames": [
+        "/^org.apache.iceberg/"
+      ]
     },
     {
-      "matchPackagePatterns": ["^com.fasterxml.jackson"],
-      "groupName": "Jackson packages"
+      "groupName": "Jackson packages",
+      "matchPackageNames": [
+        "/^com.fasterxml.jackson/"
+      ]
     }
   ],
-  "docker": {
-    "enabled": true,
-    "pinDigests": true
-  },
   "gradle": {
     "enabled": true
   },
   "pip_requirements": {
-    "fileMatch": ["^requirements\\.txt$"]
+    "fileMatch": [
+      "^requirements\\.txt$"
+    ]
   },
   "ignorePaths": [
     "**/node_modules/**",
     "**/bower_components/**"
   ],
-  "labels": ["dependencies"],
+  "labels": [
+    "dependencies"
+  ],
   "prHourlyLimit": 2,
   "prConcurrentLimit": 10,
-  "schedule": ["every weekend"]
+  "schedule": [
+    "every weekend"
+  ]
 }

@@ -12,7 +12,7 @@ repositories {
     mavenCentral()
 }
 
-val flinkVersion = "1.20.0"
+val flinkVersion = "1.20.1"
 val icebergVersion = "1.8.1" 
 val kafkaConnectorVersion = "3.4.0-1.20"
 

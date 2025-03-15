@@ -47,7 +47,7 @@ dependencies {
     implementation("org.apache.flink:flink-s3-fs-hadoop:$flinkVersion")
     implementation("org.apache.hadoop:hadoop-aws:3.3.6")
     implementation("org.apache.hadoop:hadoop-common:3.3.6")
-    implementation("software.amazon.awssdk:s3:2.25.12")
+    implementation("software.amazon.awssdk:s3:2.31.1")
 
     // Logging
     implementation("org.slf4j:slf4j-api:2.0.17")

@@ -32,7 +32,7 @@ jobs:
       run: make demo
       
     - name: 📦 Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v7
       with:
         name: flink-jobs
         path: |

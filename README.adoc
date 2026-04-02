@@ -165,7 +165,7 @@ Configuration files in `config/local/` and `config/cloud/` define bootstrap serv
 │   │   ├── data-flow.svg
 │   │   ├── docker-services.d2
 │   │   └── docker-services.svg
-│   └── flink-iceberg-minio-guidelines.md
+│   └── iceberg-guide.adoc               # Iceberg integration reference
 ├── flink/
 │   └── Dockerfile                   # Flink 1.20 + Iceberg 1.8.1 + Kafka connector
 ├── flink-jobs/
@@ -225,7 +225,7 @@ Configuration files in `config/local/` and `config/cloud/` define bootstrap serv
 
 |SeaweedFS
 |latest
-|S3-compatible object storage (replaces MinIO)
+|S3-compatible object storage
 
 |Trino
 |latest

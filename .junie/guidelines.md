@@ -116,8 +116,7 @@ This project demonstrates an end-to-end data pipeline using Apache Kafka, Apache
 
 ## Accessing the Services
 
-- Kafka UI: http://localhost:8080
-- Minio Console: http://localhost:9001 (minioadmin/minioadmin)
+- SeaweedFS (S3 UI): http://localhost:9001
 - Flink Dashboard: http://localhost:8081
 - Trino UI: http://localhost:8082
 - Superset: http://localhost:8088 (admin/admin)

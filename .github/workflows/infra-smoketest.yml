@@ -1,0 +1,104 @@
+name: Infrastructure Smoke Test
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'  # Monday 6am UTC
+
+jobs:
+  infra-smoketest:
+    name: Infra Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          dependency-graph: disabled
+
+      - name: Build Flink JARs
+        working-directory: flink-jobs
+        run: ./gradlew buildAllJars
+
+      - name: Start services
+        run: docker compose up -d --build
+        timeout-minutes: 10
+
+      - name: Wait for services to be healthy
+        run: |
+          for svc_wait in "kafka 60" "minio 30" "iceberg-rest 30" "trino-coordinator 60"; do
+            svc=$(echo $svc_wait | cut -d' ' -f1)
+            max=$(echo $svc_wait | cut -d' ' -f2)
+            echo "Waiting for $svc..."
+            for i in $(seq 1 $max); do
+              docker compose ps "$svc" 2>/dev/null | grep -q "Up" && break
+              [ $i -eq $max ] && echo "Timeout waiting for $svc" && exit 1
+              sleep 2
+            done
+          done
+
+          echo "Waiting for Flink JobManager API..."
+          for i in $(seq 1 30); do
+            docker exec flink-jobmanager curl -sf http://localhost:8081/overview > /dev/null 2>&1 && break
+            sleep 2
+          done
+
+          echo "Waiting for Trino to accept queries..."
+          for i in $(seq 1 60); do
+            docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg --execute "SELECT 1" > /dev/null 2>&1 && break
+            sleep 2
+          done
+        timeout-minutes: 5
+
+      - name: All containers running
+        run: |
+          FAILED=0
+          for svc in kafka minio flink-jobmanager flink-taskmanager iceberg-rest trino-coordinator superset data-generator flink-sql-client; do
+            if docker compose ps "$svc" | grep -q "Up"; then
+              echo "✓ $svc"
+            else
+              echo "✗ $svc - NOT RUNNING"
+              FAILED=1
+            fi
+          done
+          [ $FAILED -eq 0 ] || exit 1
+
+      - name: S3 bucket exists
+        run: |
+          docker run --rm --network flink-trino-superset-pipeline_pipeline-network \
+            -e AWS_ACCESS_KEY_ID=minioadmin \
+            -e AWS_SECRET_ACCESS_KEY=minioadmin \
+            -e AWS_DEFAULT_REGION=us-east-1 \
+            amazon/aws-cli --endpoint-url http://minio:9000 s3 ls s3://warehouse/
+
+      - name: Trino can query
+        run: |
+          docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+            --execute "CREATE SCHEMA IF NOT EXISTS iceberg.warehouse"
+          docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+            --execute "SELECT 1 AS healthy"
+
+      - name: Data generator producing
+        run: |
+          sleep 10
+          docker logs data-generator 2>&1 | grep -q "Generated" || \
+            (echo "Data generator not producing"; exit 1)
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          for svc in kafka minio flink-jobmanager flink-taskmanager iceberg-rest trino-coordinator superset data-generator; do
+            echo "=== $svc ==="
+            docker logs "$svc" 2>&1 | tail -30
+            echo ""
+          done
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

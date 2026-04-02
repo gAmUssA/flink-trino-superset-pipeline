@@ -12,9 +12,9 @@ repositories {
     mavenCentral()
 }
 
-val flinkVersion = "1.20.0"
+val flinkVersion = "1.20.3"
 val icebergVersion = "1.8.1" 
-val kafkaConnectorVersion = "3.4.0-1.20"
+val kafkaConnectorVersion = "4.0.1-2.0"
 
 dependencies {
     // Apache Flink dependencies

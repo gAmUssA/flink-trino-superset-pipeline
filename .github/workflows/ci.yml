@@ -19,6 +19,8 @@ jobs:
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v6
+        with:
+          dependency-graph: disabled
 
       - name: Build Flink JARs
         working-directory: flink-jobs
@@ -41,6 +43,8 @@ jobs:
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v6
+        with:
+          dependency-graph: disabled
 
       - name: Build Flink JARs
         working-directory: flink-jobs

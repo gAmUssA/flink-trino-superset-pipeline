@@ -1,416 +1,109 @@
-= Flink-Trino-Superset Pipeline: Project Learnings
+= Project Learnings
 :toc:
 :icons: font
 :source-highlighter: highlight.js
-:imagesdir: images
-
-== 📋 Project Overview
-
-This document summarizes the key learnings and issues addressed in the Flink-Trino-Superset data pipeline project.
-
-== 🏗️ Architecture
-
-[source,mermaid]
-----
-flowchart LR
-    A[Data Generator] -->|Produces Events| B[Kafka]
-    B -->|Consumes Events| C[Flink]
-    C -->|Processes Data| D[Iceberg]
-    D -->|Stores Tables| E[Trino]
-    E -->|Queries Data| F[Superset]
-    F -->|Visualizes| G[Dashboards]
-
-    style A fill:#f9d5e5,stroke:#333,stroke-width:2px
-    style B fill:#eeeeee,stroke:#333,stroke-width:2px
-    style C fill:#d5e8f9,stroke:#333,stroke-width:2px
-    style D fill:#e5f9d5,stroke:#333,stroke-width:2px
-    style E fill:#f9e5d5,stroke:#333,stroke-width:2px
-    style F fill:#d5f9e5,stroke:#333,stroke-width:2px
-    style G fill:#e5d5f9,stroke:#333,stroke-width:2px
-----
-
-The pipeline consists of the following components:
-
-* *Data Generator*: Python application that produces synthetic user activity and sensor data
-* *Apache Kafka*: Message broker for data ingestion (running in KRaft mode without Zookeeper)
-* *Apache Flink*: Stream processing framework for real-time data processing
-* *Apache Iceberg*: Table format for data lake storage
-* *Trino*: Distributed SQL query engine
-* *Apache Superset*: Data visualization and dashboarding
-
-== 🔄 Data Flow
-
-1. The *Data Generator* produces two types of sample data:
-   * User activity data (page views, clicks, searches, purchases, etc.)
-   * Sensor data (temperature, humidity, pressure, light, motion)
-
-2. Data is sent to *Kafka* topics:
-   * `user-activity` topic for user events
-   * `sensor-data` topic for sensor readings
-
-3. *Flink* jobs consume data from Kafka:
-   * `UserActivityProcessor` processes user activity events
-   * `SensorDataProcessor` processes sensor data
-
-4. Processed data is written to *Iceberg* tables:
-   * `iceberg.warehouse.user_activity`
-   * `iceberg.warehouse.sensor_data`
-
-5. *Trino* provides SQL querying capabilities over the Iceberg tables
-   * Pre-defined views for analytics: `hourly_user_activity` and `sensor_stats`
-
-6. *Superset* connects to Trino for data visualization and dashboarding
-
-== 📁 Project Structure
-
-[source]
-----
-.
-├── data-generator/              # Data generator application (uses Confluent Kafka library)
-│   ├── Dockerfile               # Docker image definition
-│   ├── requirements.txt         # Python dependencies
-│   └── data_generator.py        # Data generator script (configurable via property files)
-├── config/                      # Configuration files
-│   ├── cloud/                   # Cloud environment configuration
-│   │   ├── kafka.properties     # Confluent Cloud Kafka configuration
-│   │   └── topics.properties    # Kafka topic names for cloud
-│   └── local/                   # Local environment configuration
-│       ├── kafka.properties     # Local Kafka configuration
-│       └── topics.properties    # Kafka topic names for local
-├── docker-compose.yml           # Docker Compose configuration
-├── flink-jobs/                  # Flink processing jobs
-│   ├── build.gradle.kts         # Gradle build configuration
-│   ├── settings.gradle.kts      # Gradle settings
-│   ├── create_tables.sql        # SQL script to create Iceberg tables
-│   ├── sql-jobs/                # Flink SQL jobs
-│   │   ├── user-activity-to-iceberg.sql  # SQL job for user activity data
-│   │   └── sensor-data-to-iceberg.sql    # SQL job for sensor data
-│   └── src/                     # Source code for Java-based jobs
-│       └── main/
-│           └── java/
-│               └── com/
-│                   └── example/
-│                       ├── UserActivityProcessor.java  # User activity processor
-│                       └── SensorDataProcessor.java    # Sensor data processor
-├── trino/                       # Trino configuration
-│   └── etc/                     # Trino configuration files
-│       ├── config.properties    # Server configuration
-│       ├── jvm.config           # JVM configuration
-│       ├── node.properties      # Node configuration
-│       ├── log.properties       # Logging configuration
-│       └── catalog/             # Catalog configurations
-│           ├── iceberg.properties  # Iceberg catalog
-│           └── memory.properties   # Memory catalog
-├── Makefile                     # Project automation
-├── requirements.adoc            # Project requirements
-└── README.adoc                  # Project documentation
-----
 
-== 🔍 Key Components Analysis
+Lessons learned while building the Flink-Trino-Superset pipeline.
+For architecture and setup instructions, see link:README.adoc[README].
+For Iceberg integration details, see link:docs/iceberg-guide.adoc[Iceberg Guide].
 
-=== Data Generator
+== Flink + Iceberg Integration
 
-The data generator is a Python application that:
+=== Checkpointing is mandatory for Iceberg writes
+Iceberg commits data only during Flink checkpoints.
+Without `execution.checkpointing.interval` set, data is buffered in memory but never committed to S3.
+Tables appear empty even though the job shows records processed.
 
-* Uses the Faker library to generate realistic data
-* Produces two types of events: user activity and sensor data
-* Sends data to Kafka topics with configurable rates
-* Simulates real-world patterns with randomized data
-* Supports both local and cloud (Confluent Cloud) Kafka environments
+=== Use `catalog-type=rest`, not `catalog-impl`
+The official Iceberg docs recommend `'catalog-type'='rest'` for the built-in REST catalog.
+Using `'catalog-impl'='org.apache.iceberg.rest.RESTCatalog'` is the custom catalog path and may behave differently.
 
-The data generator is configurable via property files located in the `config/` directory:
+=== Catalog context switches break table references
+After `USE CATALOG iceberg_catalog; USE warehouse;`, temporary tables created in the default catalog become invisible.
+Fix: use fully-qualified names like `default_catalog.default_database.my_kafka_source`.
 
-* `config/local/` - Configuration for local Kafka development
-  * `kafka.properties` - Local Kafka connection settings
-  * `topics.properties` - Kafka topic names for local environment
-* `config/cloud/` - Configuration for Confluent Cloud
-  * `kafka.properties` - Confluent Cloud Kafka connection settings
-  * `topics.properties` - Kafka topic names for cloud environment
+=== `iceberg-aws-bundle` replaces individual AWS jars
+Individual jars (`iceberg-aws`, `s3`, `hadoop-aws`) miss transitive dependencies.
+The `iceberg-aws-bundle` is a single shaded JAR with everything needed for S3FileIO.
 
-The environment can be switched by setting the `KAFKA_ENV` environment variable to either `local` or `cloud`.
+=== Caffeine cache is required at runtime
+Iceberg 1.8.1's `RESTSessionCatalog` uses Caffeine for catalog caching.
+The `iceberg-flink-runtime` jar does not bundle it -- add `caffeine-3.1.8.jar` to Flink's lib.
 
-=== Flink Jobs
+=== S3 path-style-access must be set in TWO places
+SeaweedFS (and MinIO) require path-style URLs (`http://host:9000/bucket/key`).
+Without it, the AWS SDK constructs `http://bucket.host:9000/key` which fails DNS.
+Set it in both Flink catalog properties AND the REST catalog env (`CATALOG_S3_PATH__STYLE__ACCESS=true`).
 
-The project uses Flink SQL for data processing, following the recommended approach of using Flink Table API or SQL instead of the DataStream API. Two main SQL jobs process data from Kafka:
+== Flink SQL Patterns
 
-==== user-activity-to-iceberg.sql
+=== Prefer SQL jobs over Java Table API for simple pipelines
+SQL files in `flink-jobs/sql-jobs/` are declarative and easier to maintain than equivalent Java code.
+The Java Table API processors exist for cases needing programmatic control (e.g., nested ROW field access).
 
-* Defines a Kafka source table that reads from the `user-activity` topic
-* Creates an Iceberg sink table for storing processed user activity data
-* Transforms and inserts data from Kafka to Iceberg
-* Includes watermark definitions for event time processing
-* Handles JSON parsing with error tolerance
+=== Nested ROW field access in Table API
+`$("location.lat")` does NOT access the `lat` field of a ROW column named `location`.
+It looks for a column literally named `location.lat`.
+Correct syntax: `$("location").get("lat")`.
 
-==== sensor-data-to-iceberg.sql
+=== Watermarks and reserved keywords
+`timestamp` is a SQL reserved word.
+Always use backticks in DDL: `` WATERMARK FOR `timestamp` AS `timestamp` - INTERVAL '5' SECOND ``.
 
-* Defines a Kafka source table that reads from the `sensor-data` topic
-* Creates an Iceberg sink table for storing processed sensor data
-* Transforms and inserts data from Kafka to Iceberg
-* Includes watermark definitions for event time processing
-* Handles nested JSON structures (e.g., location data with lat/lon/facility)
+=== JSON parse error tolerance
+`'json.ignore-parse-errors' = 'true'` prevents the entire Flink job from crashing on malformed records.
+Bad records are silently dropped.
 
-=== Iceberg Tables
+== Infrastructure
 
-Two main tables are defined in the Iceberg catalog:
+=== SeaweedFS as MinIO replacement
+MinIO abandoned its open-source direction in late 2025.
+SeaweedFS (Apache 2.0, since 2012) is a drop-in replacement.
+Keep the container hostname as `minio` and S3 port as 9000 to avoid cascading config changes.
+See https://rmoff.net/2026/01/14/alternatives-to-minio-for-single-node-local-s3/[rmoff's analysis].
 
-==== user_activity
+=== SeaweedFS health check
+`wget --spider` sends HTTP HEAD requests, which SeaweedFS's master endpoint rejects.
+Use `curl -sf` instead for health checks.
 
-[source,sql]
-----
-CREATE TABLE IF NOT EXISTS iceberg.warehouse.user_activity (
-    user_id VARCHAR,
-    event_type VARCHAR,
-    event_time TIMESTAMP,
-    session_id VARCHAR,
-    ip_address VARCHAR,
-    user_agent VARCHAR,
-    page_url VARCHAR,
-    total_amount DOUBLE
-)
-WITH (
-    format = 'PARQUET',
-    partitioning = ARRAY['day(event_time)']
-);
-----
+=== Docker volume permissions for checkpoints
+Flink runs as uid 9999 (`flink` user).
+Docker named volumes are created as root.
+The checkpoint directory `/opt/flink/checkpoints` becomes unwritable.
+Fix: use the container's local filesystem instead of a shared volume.
 
-==== sensor_data
+=== Kafka KRaft mode
+Apache Kafka 3.9 runs in KRaft mode (no Zookeeper).
+Single-node setup with `KAFKA_PROCESS_ROLES=controller,broker`.
 
-[source,sql]
-----
-CREATE TABLE IF NOT EXISTS iceberg.warehouse.sensor_data (
-    sensor_id VARCHAR,
-    sensor_type VARCHAR,
-    event_time TIMESTAMP,
-    latitude DOUBLE,
-    longitude DOUBLE,
-    facility VARCHAR,
-    sensor_value DOUBLE
-)
-WITH (
-    format = 'PARQUET',
-    partitioning = ARRAY['day(event_time)', 'sensor_type']
-);
-----
+== Superset
 
-=== Analytics Views
+=== Dashboard export/import
+Superset's `import-dashboards -p <zip> -u admin` restores the full dashboard including database connections, datasets, and charts.
+The export zip is baked into the Docker image so `make setup-superset` restores everything automatically.
 
-Two pre-defined views for analytics:
+=== Trino connection URI
+The correct SQLAlchemy URI for Superset is `trino://admin@trino-coordinator:8080/iceberg/warehouse`.
+The `trino` pip package alone is insufficient -- also install `sqlalchemy-trino`.
 
-==== hourly_user_activity
+== Dependency Gotchas
 
-Aggregates user activity by hour and event type.
+[cols="1,2",options="header"]
+|===
+|Dependency |Notes
 
-==== sensor_stats
+|`iceberg-flink-runtime-1.20`
+|Bundles Flink integration but NOT AWS SDK or Caffeine
 
-Provides statistics on sensor readings by hour, type, and facility.
+|`iceberg-aws-bundle`
+|Shaded jar with full AWS SDK v2 -- use this instead of individual AWS jars
 
-== 🚨 Identified Issues and Improvements
+|`caffeine`
+|Required by Iceberg REST catalog client, not bundled anywhere
 
-=== 1. Flink SQL Implementation
-
-*Issue*: ✅ RESOLVED - The initial Java-based Flink jobs were writing to file sinks instead of Iceberg tables.
-
-*Solution*: The project now uses Flink SQL jobs to process data from Kafka and write directly to Iceberg tables. This approach:
-
-1. Follows the recommended practice of using Flink Table API or SQL instead of DataStream API
-2. Simplifies the code by using declarative SQL instead of imperative Java
-3. Provides better integration with Iceberg through the Flink SQL connector
-4. Includes proper configuration for the Iceberg catalog and S3 storage
-
-The implementation can be found in the `flink-jobs/sql-jobs/` directory, with separate SQL files for user activity and sensor data processing.
-
-=== 2. Java Version Mismatch
-
-*Issue*: The project guidelines specify Java 21, but the build.gradle.kts file is configured for Java 17.
-
-*Solution*: Update the build.gradle.kts file to use Java 21:
-
-[source,kotlin]
-----
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-}
-
-tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = "21"
-}
-----
-
-=== 3. Kafka Configuration and Multi-Environment Support
-
-*Issue*: ✅ RESOLVED - The project needed to support both local Kafka and Confluent Cloud environments.
-
-*Solution*: The project now includes:
-
-1. A structured `config/` directory with separate configurations for local and cloud environments
-2. Kafka in KRaft mode (without Zookeeper) for the local environment
-3. Configuration for Confluent Cloud for the cloud environment
-4. Environment switching via the `KAFKA_ENV` environment variable
-5. Proper documentation in the README.adoc file
-
-This approach allows developers to easily switch between local development and cloud deployment without code changes.
-
-=== 4. Timestamp Handling and Event Time Processing
-
-*Issue*: ✅ RESOLVED - The initial implementation lacked proper timestamp handling for event time processing.
-
-*Solution*: The Flink SQL jobs now include:
-
-1. Proper timestamp parsing with ISO-8601 format support:
-   ```sql
-   'json.timestamp-format.standard' = 'ISO-8601'
-   ```
-
-2. Watermark definitions for event time processing:
-   ```sql
-   WATERMARK FOR `timestamp` AS `timestamp` - INTERVAL '5' SECOND
-   ```
-
-3. Separate event_time and processing_time fields in the sink tables:
-   ```sql
-   event_time TIMESTAMP(3),
-   ...
-   processing_time TIMESTAMP(3)
-   ```
-
-This approach enables proper event time processing, handling of out-of-order events, and analysis of processing latency.
-
-=== 5. Error Handling for Malformed Data
-
-*Issue*: ✅ RESOLVED - The initial implementation lacked robust error handling for malformed data.
-
-*Solution*: The Flink SQL jobs now include error handling for malformed JSON data:
-
-1. JSON parsing errors are ignored to prevent job failures:
-   ```sql
-   'json.ignore-parse-errors' = 'true'
-   ```
-
-2. Proper JSON format configuration:
-   ```sql
-   'format' = 'json',
-   'json.timestamp-format.standard' = 'ISO-8601'
-   ```
-
-3. Handling of nested JSON structures (e.g., location data):
-   ```sql
-   location ROW<lat DOUBLE, lon DOUBLE, facility STRING>
-   ```
-
-This approach ensures that the pipeline is resilient to data quality issues and can continue processing valid records even when some records are malformed.
-
-=== 6. Makefile Improvements
-
-*Issue*: The Makefile uses sleep in some places instead of wait/retry logic as specified in the guidelines.
-
-*Solution*: Replace sleep commands with proper wait/retry logic as implemented in the `wait-for-service` function.
-
-=== 7. Documentation Format
-
-*Issue*: ✅ RESOLVED - Some documentation was in Markdown format instead of AsciiDoc as specified in the guidelines.
-
-*Solution*: The project documentation has been converted to AsciiDoc format:
-
-1. README.adoc now uses AsciiDoc format with proper formatting, tables, and diagrams
-2. requirements.adoc contains the project requirements in AsciiDoc format
-3. project_learnings.adoc (this document) uses AsciiDoc format
-4. VERIFY.adoc provides verification steps in AsciiDoc format
-
-The documentation now follows the guidelines:
-* Uses one sentence per line in AsciiDoc
-* Includes emoji for better readability
-* Uses Mermaid diagrams inside docs
-* Provides comprehensive information about the project structure and components
-
-== 🛠️ Best Practices
-
-=== Flink Development
-
-1. *Use Flink SQL*: The project now follows the guideline to prefer Flink SQL over the DataStream API:
-   * SQL jobs in the `flink-jobs/sql-jobs/` directory
-   * Declarative approach for defining sources, transformations, and sinks
-   * Better readability and maintainability
-   * Easier integration with Iceberg
-
-2. *Event Time Processing*: The SQL jobs implement proper event time processing:
-   ```sql
-   WATERMARK FOR `timestamp` AS `timestamp` - INTERVAL '5' SECOND
-   ```
-
-3. *Error Handling*: The SQL jobs include error handling for malformed data:
-   ```sql
-   'json.ignore-parse-errors' = 'true'
-   ```
-
-4. *Iceberg Integration*: Direct integration with Iceberg through the Flink SQL connector:
-   ```sql
-   CREATE CATALOG iceberg_catalog WITH (
-     'type'='iceberg',
-     'catalog-impl'='org.apache.iceberg.rest.RESTCatalog',
-     'uri'='http://iceberg-rest:8181',
-     'warehouse'='s3://warehouse/'
-   )
-   ```
-
-=== Docker and Infrastructure
-
-1. *Use OrbStack*: The guidelines recommend using OrbStack instead of Docker Desktop for managing containers.
-
-2. *Docker Compose*: Don't add version attribute to docker-compose.yaml file.
-
-3. *Kafka Configuration*: Use Apache Kafka 3.9.0 in KRaft mode without Zookeeper.
-
-=== Build and Deployment
-
-1. *Use Gradle with Kotlin*: The project uses Gradle with Kotlin DSL for build scripts.
-
-2. *Use SDKMAN*: Recommended for managing Java SDKs.
-
-3. *GitHub Actions*: Create GitHub Actions based on commands in the Makefile.
-
-== 📊 Monitoring and Observability
-
-The pipeline includes several monitoring points:
-
-1. *Kafka UI*: Available at http://localhost:8080 for monitoring Kafka topics and consumers.
-
-2. *Flink Dashboard*: Available at http://localhost:8081 for monitoring Flink jobs and performance.
-
-3. *Trino UI*: Available at http://localhost:8082 for monitoring query execution.
-
-4. *Minio Console*: Available at http://localhost:9001 for monitoring S3 storage.
-
-5. *Superset*: Available at http://localhost:8088 for data visualization and dashboards.
-
-== 🚀 Getting Started
-
-1. Clone the repository
-2. Run `make up` to start all services
-3. Run `make create-tables` to create Iceberg tables
-4. Run `make deploy-flink-jobs` to deploy Flink jobs
-5. Access Superset at http://localhost:8088 (admin/admin) to create dashboards
-
-For a complete demo, run `make demo` which will:
-1. Build all components
-2. Start all services
-3. Create tables
-4. Deploy Flink jobs
-5. Run example queries
-6. Set up Superset
-
-== 🔮 Future Improvements
-
-1. *Add Schema Registry*: Implement Confluent Schema Registry for schema evolution.
-
-2. *Implement CDC Pipeline*: Add Change Data Capture from databases.
-
-3. *Add Unit and Integration Tests*: Improve test coverage.
-
-4. *Implement CI/CD Pipeline*: Automate testing and deployment.
-
-5. *Add Monitoring and Alerting*: Implement Prometheus and Grafana for monitoring.
-
-6. *Implement Data Quality Checks*: Add data quality validation in the pipeline.
-
-7. *Optimize Performance*: Fine-tune Flink and Trino for better performance.
+|`hadoop-common` + `hadoop-hdfs-client`
+|Required by `FlinkCatalogFactory.clusterHadoopConf()` at catalog creation
+
+|`httpclient5` + `httpcore5`
+|HTTP transport for REST catalog communication
+|===

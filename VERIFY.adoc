@@ -1,223 +1,122 @@
-= Pipeline Verification Guide
+= Verification Guide
 :toc:
 :icons: font
 :source-highlighter: highlight.js
 
-This document provides steps to verify that the Flink-Trino-Superset pipeline is functioning correctly.
-
-== 🔄 End-to-End Data Flow Verification
-
-=== 1. Verify Flink Jobs
-
-Flink jobs should be processing data from Kafka and writing to Iceberg tables.
-
-[source,bash]
-----
-# Check Flink Job Status through UI
-open http://localhost:8081
-
-# Alternative: Use the CLI to check job status
-docker exec flink-jobmanager flink list -a
-----
-
-*What to look for:*
-
-* The UserActivityProcessor and SensorDataProcessor jobs should be in "RUNNING" state
-* Job metrics should show records being processed (non-zero records in/out)
-
-=== 2. Verify Data in Iceberg/Trino
-
-Confirm data is landing in Iceberg tables and is queryable via Trino.
-
-[source,bash]
-----
-# Use make task for verification
-make verify-data-flow
-
-# Alternative: Direct Trino queries
-docker exec -it trino-coordinator trino --server localhost:8080 --catalog iceberg
-----
-
-Once in the Trino CLI:
-
-[source,sql]
-----
--- Show schemas and tables
-SHOW SCHEMAS FROM iceberg;
-SHOW TABLES FROM iceberg.warehouse;
-
--- Check user activity data
-SELECT COUNT(*) FROM iceberg.warehouse.user_activity;
-SELECT event_type, COUNT(*) FROM iceberg.warehouse.user_activity GROUP BY event_type;
-
--- Check sensor data
-SELECT COUNT(*) FROM iceberg.warehouse.sensor_data;
-SELECT sensor_type, AVG(reading) FROM iceberg.warehouse.sensor_data GROUP BY sensor_type;
-----
-
-*What to look for:*
-
-* Non-zero row counts in both tables
-* Distribution of data across different event types and sensor types
-
-=== 3. Verify S3 Storage (SeaweedFS)
-
-Inspect the physical data files in SeaweedFS to confirm Iceberg is storing data.
-
-[source,bash]
-----
-# Access SeaweedFS Master UI
-open http://localhost:9001
-
-# Or use AWS CLI to list bucket contents
-docker run --rm --network pipeline-network \
-  -e AWS_ACCESS_KEY_ID=minioadmin \
-  -e AWS_SECRET_ACCESS_KEY=minioadmin \
-  -e AWS_DEFAULT_REGION=us-east-1 \
-  amazon/aws-cli --endpoint-url http://minio:9000 s3 ls s3://warehouse/ --recursive
-----
-
-*What to look for:*
-
-* Warehouse bucket should contain table directories
-* Table directories should contain Parquet data files
-* Metadata files should be present
-
-=== 4. Verify Superset Integration
-
-Ensure Superset can query and visualize the data.
-
-[source,bash]
-----
-# Access Superset
-open http://localhost:8088  # Login: admin/admin
-----
-
-*Steps to verify:*
-
-1. Go to Data → Databases → check Trino connection status
-2. Go to Data → Datasets → create a dataset from iceberg.warehouse.user_activity
-3. Create a simple chart to visualize event distribution
-
-== 🚀 Using the Verification Tasks
-
-=== Complete Verification
-
-Run the automated verification:
+== Quick Verification
 
 [source,bash]
 ----
 make verify-demo
 ----
 
-This will:
+This checks all containers, Flink job status, Iceberg table data, S3 storage, and Superset.
 
-1. Check all containers are running (using `smoketest`)
-2. Verify Flink jobs are running
-3. Verify data is present in Iceberg tables (using `verify-data-flow`)
-4. Run example queries against the tables
-5. Report success/failure for each step
+== Step-by-Step Verification
 
-=== Individual Verification Tasks
-
-You can also run individual verification tasks:
+=== 1. Containers Running
 
 [source,bash]
 ----
-# Validate startup of all containers
 make smoketest
+----
 
-# Verify data is flowing through the pipeline
+All 9 services should be up: kafka, minio (SeaweedFS), flink-jobmanager, flink-taskmanager, iceberg-rest, trino-coordinator, superset, data-generator, flink-sql-client.
+
+=== 2. Flink Jobs
+
+[source,bash]
+----
+# Via UI
+open http://localhost:8081
+
+# Via CLI
+docker exec flink-jobmanager flink list
+----
+
+Expect 2 running jobs: `insert-into_iceberg_catalog.warehouse.user_activity` and `insert-into_iceberg_catalog.warehouse.sensor_data`.
+
+=== 3. Data in Iceberg Tables
+
+[source,bash]
+----
 make verify-data-flow
 
-# Validate SQL scripts and Java code setup
-make validate-setup
+# Or query directly via Trino CLI
+docker exec -it trino-coordinator trino --server localhost:8080 --catalog iceberg
 ----
 
-==== smoketest
+[source,sql]
+----
+SELECT event_type, COUNT(*) FROM warehouse.user_activity GROUP BY event_type;
 
-The `smoketest` task validates that all required containers are running:
+SELECT sensor_type, COUNT(*), ROUND(AVG(reading), 2) as avg
+FROM warehouse.sensor_data GROUP BY sensor_type;
+----
 
-* Kafka
-* S3 Storage (SeaweedFS)
-* Flink JobManager
-* Flink TaskManager
-* Iceberg REST Catalog
-* Trino
-* Superset
-* Data Generator
-* Flink SQL Client
+Both tables should have rows with distributed event/sensor types.
 
-==== verify-data-flow
-
-The `verify-data-flow` task verifies that data is flowing through the pipeline:
-
-* Checks if user activity data is present in the Iceberg table
-* Shows the distribution of event types in the user activity data
-* Checks if sensor data is present in the Iceberg table
-* Shows the distribution of sensor types and average values
-
-==== validate-setup
-
-The `validate-setup` task validates the SQL scripts and Java code setup:
-
-* Checks for the SQL scripts directory
-* Verifies the existence of required SQL scripts (sensor-data-to-iceberg.sql, user-activity-to-iceberg.sql)
-* Checks for required Java source files (SensorDataProcessor.java, UserActivityProcessor.java)
-* Verifies that build.gradle.kts exists and contains Iceberg dependencies
-
-== 🔍 Troubleshooting Common Issues
-
-=== No Data in Iceberg Tables
-
-*Possible causes:*
-
-* Flink jobs not running or failing
-* Data generator not producing messages to Kafka
-* Iceberg catalog configuration issues
-
-*Verification steps:*
+=== 4. S3 Storage (SeaweedFS)
 
 [source,bash]
 ----
-# Check if data generator is sending data to Kafka
-docker exec -it kafka kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic user-activity --from-beginning --max-messages 5
+# Via SeaweedFS UI
+open http://localhost:9001
 
-# Check Flink job logs
-docker logs flink-taskmanager | grep -i error
-
-# Check Iceberg catalog configuration
-cat ./trino/etc/catalog/iceberg.properties
+# Via AWS CLI
+docker run --rm --network flink-trino-superset-pipeline_pipeline-network \
+  -e AWS_ACCESS_KEY_ID=minioadmin \
+  -e AWS_SECRET_ACCESS_KEY=minioadmin \
+  -e AWS_DEFAULT_REGION=us-east-1 \
+  amazon/aws-cli --endpoint-url http://minio:9000 s3 ls s3://warehouse/ --recursive
 ----
 
-=== Trino Can't Query Iceberg Tables
+Expect Parquet data files and Iceberg metadata under `s3://warehouse/warehouse/`.
 
-*Possible causes:*
-
-* Tables not created correctly
-* Iceberg catalog misconfiguration
-* S3 storage connectivity issues
-
-*Verification steps:*
+=== 5. Superset Dashboard
 
 [source,bash]
 ----
-# Manually recreate tables
-make create-tables
-
-# Check Trino logs
-docker logs trino | grep -i error
-
-# Verify S3 storage is accessible from Trino
-docker exec -it trino-coordinator curl -v http://minio:9000
+open http://localhost:8088
 ----
 
-== 📊 Expected Results
+Login with `admin`/`admin`.
+The "Streaming Pipeline Analytics" dashboard should show 6 charts with live data.
 
-When the pipeline is functioning correctly, you should see:
+== Troubleshooting
 
-1. *Flink Jobs:* 2+ running jobs with non-zero metrics
-2. *Iceberg Tables:* Tables with data that can be queried via Trino
-3. *Superset:* Ability to create visualizations from the data
+[cols="1,2",options="header"]
+|===
+|Problem |Fix
 
-For a successful verification, the `verify-demo` task should complete without errors and show data counts in all tables.
+|No data in tables
+|Check Flink dashboard (:8081) for running jobs. Verify data generator: `docker logs data-generator`. Iceberg needs ~30s for first checkpoint commit.
+
+|Trino can't find tables
+|Tables are created by Flink, not Trino. Deploy Flink jobs first: `make deploy-flink-jobs`. Wait for a checkpoint cycle.
+
+|Flink jobs fail with ClassNotFound
+|Rebuild Docker images: `docker-compose up -d --build flink-jobmanager flink-taskmanager`
+
+|S3 storage errors
+|Check SeaweedFS health: `docker logs minio`. Verify bucket exists: `docker exec minio curl -sf http://localhost:9000/warehouse/`
+
+|Superset has no dashboard
+|Run `make setup-superset` to import the pre-built dashboard.
+|===
+
+== Makefile Targets Reference
+
+[cols="1,2",options="header"]
+|===
+|Target |Description
+
+|`make smoketest`
+|Check all containers are running
+
+|`make verify-data-flow`
+|Query Iceberg tables via Trino, show row counts and distributions
+
+|`make verify-demo`
+|Full verification: containers + jobs + data + S3 + Superset
+|===

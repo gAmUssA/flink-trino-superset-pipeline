@@ -1,0 +1,221 @@
+= Apache Iceberg with Flink: Integration Guide
+:toc:
+:icons: font
+:source-highlighter: highlight.js
+
+This guide covers how Apache Iceberg works in this pipeline -- the table format, metadata architecture, and how Flink writes to and Trino reads from Iceberg tables stored in S3-compatible storage (SeaweedFS).
+
+== How Iceberg Works
+
+Apache Iceberg is an open table format that brings SQL database capabilities to files in object storage.
+Originally developed by Netflix (2017), it became a top-level Apache project in 2020.
+
+Key capabilities:
+
+* *Schema evolution* -- add, rename, or drop columns without rewriting data
+* *Hidden partitioning* -- partition by transforms (day, hour, bucket) without exposing partition columns
+* *Time travel* -- query any historical snapshot of a table
+* *ACID transactions* -- concurrent readers and writers with snapshot isolation
+
+== Metadata Architecture
+
+Iceberg uses a three-level metadata system, all stored in S3 alongside the data:
+
+[source]
+----
+s3://warehouse/warehouse/user_activity/
+  metadata/
+    v1.metadata.json          # Level 1: Schema, partitions, snapshot list
+    snap-176629998480014857-1-abc.avro  # Level 2: Manifest list (snapshot)
+    abc-m0.avro               # Level 3: Manifest file (data file inventory)
+  data/
+    00000-0-abc.parquet       # Actual data in Parquet format
+----
+
+*Level 1 -- Metadata file*: Schema, partition spec, snapshot history. New file per commit.
+
+*Level 2 -- Manifest list*: Points to manifest files for a given snapshot. Enables time travel.
+
+*Level 3 -- Manifest files*: Lists data files with column-level stats (min/max) for query pruning.
+
+*Data files*: Parquet files containing the actual rows.
+
+== Pipeline Integration
+
+=== Components
+
+[cols="1,2",options="header"]
+|===
+|Component |Role
+
+|Flink 1.20
+|Writes data to Iceberg tables via streaming INSERT INTO
+
+|Iceberg REST Catalog (tabulario/iceberg-rest)
+|Manages table metadata via HTTP API on port 8181
+
+|SeaweedFS (S3-compatible)
+|Stores both metadata and Parquet data files on port 9000
+
+|Trino
+|Reads Iceberg tables via the same REST catalog
+|===
+
+=== Catalog Configuration
+
+Flink creates the catalog connection at job startup:
+
+[source,sql]
+----
+CREATE CATALOG iceberg_catalog WITH (
+  'type'='iceberg',
+  'catalog-type'='rest',
+  'uri'='http://iceberg-rest:8181',
+  'warehouse'='s3://warehouse/',
+  'io-impl'='org.apache.iceberg.aws.s3.S3FileIO',
+  's3.endpoint'='http://minio:9000',
+  's3.path-style-access'='true',
+  's3.access-key-id'='minioadmin',
+  's3.secret-access-key'='minioadmin'
+);
+----
+
+The REST catalog server needs matching S3 config via environment variables:
+
+[source]
+----
+CATALOG_WAREHOUSE=s3://warehouse
+CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
+CATALOG_S3_ENDPOINT=http://minio:9000
+CATALOG_S3_PATH__STYLE__ACCESS=true
+----
+
+NOTE: Double underscores (`\\__`) map to hyphens in property names. Single underscores map to dots.
+
+=== How Data Flows
+
+1. Flink jobs create tables in `iceberg_catalog.warehouse` namespace
+2. Flink writes Parquet files to `s3://warehouse/warehouse/<table>/data/`
+3. On each Flink checkpoint (every 30s), Iceberg commits a new snapshot
+4. Trino reads the same catalog via its `iceberg.properties` connector config
+5. Trino sees committed snapshots and queries the Parquet files directly
+
+=== Checkpointing is Required
+
+Iceberg commits happen only on Flink checkpoints.
+Without checkpointing enabled, data is buffered but never committed -- tables appear empty.
+
+[source,java]
+----
+Configuration config = new Configuration();
+config.setString("execution.checkpointing.interval", "30s");
+EnvironmentSettings settings = EnvironmentSettings.newInstance()
+        .inStreamingMode()
+        .withConfiguration(config)
+        .build();
+----
+
+=== Trino Reads the Same Catalog
+
+Trino connects to the same REST catalog. Config in `trino/etc/catalog/iceberg.properties`:
+
+[source,properties]
+----
+connector.name=iceberg
+iceberg.catalog.type=rest
+iceberg.rest-catalog.uri=http://iceberg-rest:8181
+fs.native-s3.enabled=true
+s3.endpoint=http://minio:9000
+s3.path-style-access=true
+s3.aws-access-key=minioadmin
+s3.aws-secret-key=minioadmin
+----
+
+== Flink SQL Examples
+
+=== Create and write to a table
+
+[source,sql]
+----
+USE CATALOG iceberg_catalog;
+CREATE DATABASE IF NOT EXISTS warehouse;
+USE warehouse;
+
+CREATE TABLE IF NOT EXISTS sensor_data (
+  sensor_id STRING,
+  sensor_type STRING,
+  event_time TIMESTAMP(3),
+  reading DOUBLE,
+  PRIMARY KEY (sensor_id) NOT ENFORCED
+);
+
+INSERT INTO sensor_data
+SELECT sensor_id, sensor_type, `timestamp` AS event_time, reading
+FROM sensor_source;
+----
+
+=== Time travel queries (via Trino)
+
+[source,sql]
+----
+-- Query table as of a specific snapshot
+SELECT * FROM iceberg.warehouse.sensor_data FOR VERSION AS OF 10963874102873;
+
+-- List all snapshots
+SELECT * FROM iceberg.warehouse."sensor_data$snapshots";
+----
+
+== Required Dependencies
+
+The Flink Docker image (`flink/Dockerfile`) must include:
+
+[cols="1,2",options="header"]
+|===
+|JAR |Purpose
+
+|iceberg-flink-runtime-1.20
+|Flink-Iceberg integration (catalog, reader, writer)
+
+|iceberg-aws-bundle
+|AWS SDK v2 for S3 access (shaded, includes all transitive deps)
+
+|caffeine
+|Cache library required by Iceberg REST catalog client
+
+|hadoop-common + hadoop-hdfs-client
+|Hadoop classes required by Iceberg's FlinkCatalogFactory
+
+|flink-s3-fs-hadoop
+|Flink's S3 filesystem support
+
+|flink-sql-connector-kafka
+|Kafka source connector
+
+|httpclient5 + httpcore5
+|HTTP client for REST catalog communication
+|===
+
+== Troubleshooting
+
+[cols="1,2",options="header"]
+|===
+|Symptom |Fix
+
+|Tables appear empty
+|Enable checkpointing (`execution.checkpointing.interval: 30s`)
+
+|`NoClassDefFoundError: Caffeine`
+|Add `caffeine-3.1.8.jar` to Flink lib
+
+|`NoClassDefFoundError: AwsServiceException`
+|Use `iceberg-aws-bundle` instead of individual AWS jars
+
+|`NoClassDefFoundError: HdfsConfiguration`
+|Add `hadoop-common` and `hadoop-hdfs-client` to Flink lib
+
+|`UnknownHostException` on S3
+|Set `s3.path-style-access=true` in both Flink catalog AND REST catalog env
+
+|`Table not found` after `USE CATALOG`
+|Reference source tables with full path: `default_catalog.default_database.my_source`
+|===

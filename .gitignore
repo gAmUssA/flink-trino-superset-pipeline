@@ -25,6 +25,7 @@ docker-compose.override.yml
 # Java
 *.class
 *.jar
+!**/gradle-wrapper.jar
 !superset/dashboard_export.zip
 *.war
 *.ear

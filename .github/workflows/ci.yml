@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  build-and-test:
-    name: Build & Test
+  flink-jobs:
+    name: Flink Jobs - Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -29,3 +29,21 @@ jobs:
       - name: Run smoke tests
         working-directory: flink-jobs
         run: ./gradlew test
+
+  data-generator:
+    name: Data Generator - Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        working-directory: data-generator
+        run: pip install -r requirements.txt
+
+      - name: Run smoke tests
+        working-directory: data-generator
+        run: python -m pytest test_data_generator.py -v

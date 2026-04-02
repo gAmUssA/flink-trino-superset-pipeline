@@ -13,6 +13,8 @@ on:
       - 'data-generator/Dockerfile'
       - 'seaweedfs/**'
       - 'trino/**'
+      - 'data-generator/Dockerfile'
+      - 'data-generator/requirements.txt'
 
 jobs:
   infra-smoketest:

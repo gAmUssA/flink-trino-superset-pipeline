@@ -1,0 +1,165 @@
+direction: right
+
+title: {
+  label: Docker Compose Services & Networking
+  near: top-center
+  shape: text
+  style.font-size: 22
+  style.bold: true
+}
+
+network: pipeline-network {
+  style.fill: "#f8fafc"
+  style.stroke: "#475569"
+  style.stroke-dash: 3
+  style.font-color: "#1e293b"
+
+  kafka: kafka {
+    shape: hexagon
+    style.fill: "#fef9c3"
+    style.stroke: "#ca8a04"
+    style.font-color: "#713f12"
+    label: |md
+      **kafka**
+      apache/kafka:3.9.0
+      9092, 29092
+    |
+  }
+
+  minio: minio {
+    shape: stored_data
+    style.fill: "#fecaca"
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+    label: |md
+      **minio** (SeaweedFS)
+      chrislusf/seaweedfs
+      9000 (S3), 9001 (UI)
+    |
+  }
+
+  s3_setup: s3-setup {
+    shape: step
+    style.fill: "#fee2e2"
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+    style.opacity: 0.8
+    label: |md
+      **s3-setup**
+      amazon/aws-cli
+      creates warehouse bucket
+    |
+  }
+
+  iceberg: iceberg-rest {
+    shape: cylinder
+    style.fill: "#fca5a5"
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+    label: |md
+      **iceberg-rest**
+      tabulario/iceberg-rest
+      8181
+    |
+  }
+
+  jm: flink-jobmanager {
+    shape: rectangle
+    style.fill: "#93c5fd"
+    style.stroke: "#1d4ed8"
+    style.font-color: "#1e3a5f"
+    label: |md
+      **flink-jobmanager**
+      flink:1.20.0-java17
+      8081 (Web UI)
+    |
+  }
+
+  tm: flink-taskmanager {
+    shape: rectangle
+    style.fill: "#93c5fd"
+    style.stroke: "#1d4ed8"
+    style.font-color: "#1e3a5f"
+    label: |md
+      **flink-taskmanager**
+      flink:1.20.0-java17
+      4 task slots
+    |
+  }
+
+  sql: flink-sql-client {
+    shape: page
+    style.fill: "#bfdbfe"
+    style.stroke: "#2563eb"
+    style.font-color: "#1e3a5f"
+    label: |md
+      **flink-sql-client**
+      Interactive SQL
+    |
+  }
+
+  trino: trino-coordinator {
+    shape: rectangle
+    style.fill: "#d8b4fe"
+    style.stroke: "#9333ea"
+    style.font-color: "#581c87"
+    label: |md
+      **trino-coordinator**
+      trinodb/trino
+      8082 -> 8080
+    |
+  }
+
+  superset: superset {
+    shape: rectangle
+    style.fill: "#e9d5ff"
+    style.stroke: "#a855f7"
+    style.font-color: "#581c87"
+    label: |md
+      **superset**
+      apache/superset:4.1.1
+      8088
+    |
+  }
+
+  datagen: data-generator {
+    shape: hexagon
+    style.fill: "#bbf7d0"
+    style.stroke: "#16a34a"
+    style.font-color: "#14532d"
+    label: |md
+      **data-generator**
+      Python + Faker
+      KAFKA_ENV=local
+    |
+  }
+
+  # Dependencies
+  datagen -> kafka: produces JSON {style.stroke: "#16a34a"; style.font-color: "#14532d"}
+  jm -> tm: coordinate {style.stroke: "#1d4ed8"; style.font-color: "#1e3a5f"}
+  sql -> jm: submit SQL {style.stroke: "#2563eb"; style.font-color: "#1e3a5f"}
+  tm -> kafka: consume topics {style.stroke: "#1d4ed8"; style.font-color: "#1e3a5f"}
+  tm -> iceberg: write Iceberg {style.stroke: "#1d4ed8"; style.font-color: "#1e3a5f"}
+  iceberg -> minio: S3 storage {style.stroke: "#dc2626"; style.font-color: "#7f1d1d"}
+  s3_setup -> minio: create bucket {style.stroke: "#dc2626"; style.stroke-dash: 3; style.font-color: "#7f1d1d"}
+  trino -> iceberg: read catalog {style.stroke: "#9333ea"; style.font-color: "#581c87"}
+  trino -> minio: read Parquet {style.stroke: "#9333ea"; style.font-color: "#581c87"}
+  superset -> trino: SQLAlchemy {style.stroke: "#a855f7"; style.font-color: "#581c87"}
+}
+
+# Volumes
+volumes: Persistent Volumes {
+  style.fill: "#f1f5f9"
+  style.stroke: "#94a3b8"
+  style.font-color: "#334155"
+
+  v1: kafka-data {shape: cylinder; style.fill: "#e2e8f0"; style.stroke: "#94a3b8"; style.font-color: "#334155"}
+  v2: minio-data {shape: cylinder; style.fill: "#e2e8f0"; style.stroke: "#94a3b8"; style.font-color: "#334155"}
+  v3: superset-data {shape: cylinder; style.fill: "#e2e8f0"; style.stroke: "#94a3b8"; style.font-color: "#334155"}
+  v4: flink-checkpoints {shape: cylinder; style.fill: "#e2e8f0"; style.stroke: "#94a3b8"; style.font-color: "#334155"}
+}
+
+network.kafka -> volumes.v1: {style.stroke-dash: 5; style.opacity: 0.4; style.stroke: "#94a3b8"}
+network.minio -> volumes.v2: {style.stroke-dash: 5; style.opacity: 0.4; style.stroke: "#94a3b8"}
+network.superset -> volumes.v3: {style.stroke-dash: 5; style.opacity: 0.4; style.stroke: "#94a3b8"}
+network.jm -> volumes.v4: {style.stroke-dash: 5; style.opacity: 0.4; style.stroke: "#94a3b8"}

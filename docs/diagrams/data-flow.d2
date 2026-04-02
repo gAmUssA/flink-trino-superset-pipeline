@@ -1,0 +1,262 @@
+direction: down
+
+title: {
+  label: End-to-End Data Flow
+  near: top-center
+  shape: text
+  style.font-size: 24
+  style.bold: true
+}
+
+# Step 1: Data Generation
+step1: "1. Generate" {
+  style.fill: "#f0fdf4"
+  style.stroke: "#16a34a"
+  style.font-color: "#14532d"
+
+  generator: |md
+    **Data Generator**
+    Python + Faker library
+  | {
+    style.font-color: "#14532d"
+  }
+
+  user_events: |md
+    **User Activity Events**
+    page_view, click, search,
+    purchase, login, logout
+  | {
+    shape: document
+    style.fill: "#bbf7d0"
+    style.stroke: "#16a34a"
+    style.font-color: "#14532d"
+  }
+
+  sensor_events: |md
+    **Sensor Data Events**
+    temperature, humidity,
+    pressure, light, motion
+  | {
+    shape: document
+    style.fill: "#bbf7d0"
+    style.stroke: "#16a34a"
+    style.font-color: "#14532d"
+  }
+
+  generator -> user_events: create {
+    style.stroke: "#16a34a"
+    style.font-color: "#14532d"
+  }
+  generator -> sensor_events: create {
+    style.stroke: "#16a34a"
+    style.font-color: "#14532d"
+  }
+}
+
+# Step 2: Kafka Ingestion
+step2: "2. Ingest" {
+  style.fill: "#fefce8"
+  style.stroke: "#ca8a04"
+  style.font-color: "#713f12"
+
+  kafka: |md
+    **Apache Kafka**
+    KRaft mode (no Zookeeper)
+  | {
+    shape: queue
+    style.font-color: "#713f12"
+  }
+
+  topic1: user-activity topic {
+    shape: parallelogram
+    style.fill: "#fef9c3"
+    style.stroke: "#ca8a04"
+    style.font-color: "#713f12"
+  }
+  topic2: sensor-data topic {
+    shape: parallelogram
+    style.fill: "#fef9c3"
+    style.stroke: "#ca8a04"
+    style.font-color: "#713f12"
+  }
+
+  kafka -> topic1 {style.stroke: "#ca8a04"}
+  kafka -> topic2 {style.stroke: "#ca8a04"}
+}
+
+# Step 3: Stream Processing
+step3: "3. Process" {
+  style.fill: "#eff6ff"
+  style.stroke: "#2563eb"
+  style.font-color: "#1e3a5f"
+
+  flink: |md
+    **Apache Flink**
+    Table API + SQL
+  | {
+    style.font-color: "#1e3a5f"
+  }
+
+  transform1: |md
+    **UserActivityProcessor**
+    Rename timestamp -> event_time
+    Add processing_time
+    Write to Iceberg
+  | {
+    shape: step
+    style.fill: "#bfdbfe"
+    style.stroke: "#2563eb"
+    style.font-color: "#1e3a5f"
+  }
+
+  transform2: |md
+    **SensorDataProcessor**
+    Flatten nested location
+    Extract lat/lon/facility
+    Add processing_time
+    Write to Iceberg
+  | {
+    shape: step
+    style.fill: "#bfdbfe"
+    style.stroke: "#2563eb"
+    style.font-color: "#1e3a5f"
+  }
+
+  flink -> transform1 {style.stroke: "#2563eb"}
+  flink -> transform2 {style.stroke: "#2563eb"}
+}
+
+# Step 4: Lakehouse Storage
+step4: "4. Store" {
+  style.fill: "#fef2f2"
+  style.stroke: "#dc2626"
+  style.font-color: "#7f1d1d"
+
+  iceberg: |md
+    **Apache Iceberg**
+    REST Catalog + Parquet
+  | {
+    shape: cylinder
+    style.font-color: "#7f1d1d"
+  }
+
+  table1: warehouse.user_activity {
+    shape: rectangle
+    style.fill: "#fecaca"
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+    style.border-radius: 4
+  }
+
+  table2: warehouse.sensor_data {
+    shape: rectangle
+    style.fill: "#fecaca"
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+    style.border-radius: 4
+  }
+
+  s3: |md
+    **SeaweedFS (S3)**
+    s3://warehouse/
+    Parquet data files
+  | {
+    shape: stored_data
+    style.fill: "#fca5a5"
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+  }
+
+  iceberg -> table1 {style.stroke: "#dc2626"}
+  iceberg -> table2 {style.stroke: "#dc2626"}
+  table1 -> s3: Parquet files {
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+  }
+  table2 -> s3: Parquet files {
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+  }
+}
+
+# Step 5: SQL Analytics
+step5: "5. Query" {
+  style.fill: "#faf5ff"
+  style.stroke: "#9333ea"
+  style.font-color: "#581c87"
+
+  trino: |md
+    **Trino**
+    Distributed SQL Engine
+  | {
+    style.font-color: "#581c87"
+  }
+
+  views: |md
+    **Analytics Views**
+    hourly_user_activity
+    sensor_stats
+  | {
+    shape: page
+    style.fill: "#e9d5ff"
+    style.stroke: "#9333ea"
+    style.font-color: "#581c87"
+  }
+
+  trino -> views: CREATE VIEW {
+    style.stroke: "#9333ea"
+    style.font-color: "#581c87"
+  }
+}
+
+# Step 6: Visualization
+step6: "6. Visualize" {
+  style.fill: "#fdf4ff"
+  style.stroke: "#a855f7"
+  style.font-color: "#581c87"
+
+  superset: |md
+    **Apache Superset**
+    Dashboards & Charts
+    admin/admin @ :8088
+  | {
+    shape: rectangle
+    style.fill: "#e9d5ff"
+    style.stroke: "#a855f7"
+    style.font-color: "#581c87"
+  }
+}
+
+# Flow connections
+step1.user_events -> step2.topic1: JSON {
+  style.stroke: "#16a34a"
+  style.font-color: "#14532d"
+}
+step1.sensor_events -> step2.topic2: JSON {
+  style.stroke: "#16a34a"
+  style.font-color: "#14532d"
+}
+step2.topic1 -> step3.transform1: earliest-offset {
+  style.stroke: "#ca8a04"
+  style.font-color: "#713f12"
+}
+step2.topic2 -> step3.transform2: earliest-offset {
+  style.stroke: "#ca8a04"
+  style.font-color: "#713f12"
+}
+step3.transform1 -> step4.table1: INSERT INTO {
+  style.stroke: "#2563eb"
+  style.font-color: "#1e3a5f"
+}
+step3.transform2 -> step4.table2: INSERT INTO {
+  style.stroke: "#2563eb"
+  style.font-color: "#1e3a5f"
+}
+step4.iceberg -> step5.trino: Iceberg REST Catalog {
+  style.stroke: "#dc2626"
+  style.font-color: "#7f1d1d"
+}
+step5.trino -> step6.superset: trino://admin@trino:8080 {
+  style.stroke: "#9333ea"
+  style.font-color: "#581c87"
+}

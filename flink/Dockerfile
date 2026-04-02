@@ -1,50 +1,39 @@
 FROM flink:1.20.0-java17
 
-# Set environment variables
 ENV FLINK_VERSION=1.20.0
 ENV ICEBERG_VERSION=1.8.1
 ENV KAFKA_CONNECTOR_VERSION=3.4.0-1.20
 
-# Install required packages
 USER root
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        curl \
-        wget \
-        unzip \
-        maven \
-        && \
+    apt-get install -y --no-install-recommends curl wget && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Create directories for dependencies
-RUN mkdir -p /opt/flink/plugins/iceberg
-RUN mkdir -p /opt/flink/plugins/s3
+RUN mkdir -p /opt/flink/lib
 
-# Download and install Flink Kafka connector
-RUN wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/${KAFKA_CONNECTOR_VERSION}/flink-sql-connector-kafka-${KAFKA_CONNECTOR_VERSION}.jar
+# Flink connectors
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/${KAFKA_CONNECTOR_VERSION}/flink-sql-connector-kafka-${KAFKA_CONNECTOR_VERSION}.jar
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-json/${FLINK_VERSION}/flink-json-${FLINK_VERSION}.jar
 
-# Download and install Flink JSON
-RUN wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-json/${FLINK_VERSION}/flink-json-${FLINK_VERSION}.jar
+# Iceberg runtime (includes core + Flink integration)
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.20/${ICEBERG_VERSION}/iceberg-flink-runtime-1.20-${ICEBERG_VERSION}.jar
 
-# Download and install Iceberg dependencies
-RUN wget -P /opt/flink/plugins/iceberg/ https://repo.maven.apache.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.20/${ICEBERG_VERSION}/iceberg-flink-runtime-1.20-${ICEBERG_VERSION}.jar
-RUN wget -P /opt/flink/plugins/iceberg/ https://repo.maven.apache.org/maven2/org/apache/iceberg/iceberg-aws/${ICEBERG_VERSION}/iceberg-aws-${ICEBERG_VERSION}.jar
-RUN wget -P /opt/flink/plugins/iceberg/ https://repo.maven.apache.org/maven2/org/apache/iceberg/iceberg-core/${ICEBERG_VERSION}/iceberg-core-${ICEBERG_VERSION}.jar
+# Iceberg AWS bundle (includes iceberg-aws + full AWS SDK v2, shaded)
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar
 
-# Download and install AWS S3 dependencies
-RUN wget -P /opt/flink/plugins/s3/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-s3-fs-hadoop/${FLINK_VERSION}/flink-s3-fs-hadoop-${FLINK_VERSION}.jar
-RUN wget -P /opt/flink/plugins/s3/ https://repo.maven.apache.org/maven2/org/apache/hadoop/hadoop-aws/3.3.6/hadoop-aws-3.3.6.jar
-RUN wget -P /opt/flink/plugins/s3/ https://repo.maven.apache.org/maven2/org/apache/hadoop/hadoop-common/3.3.6/hadoop-common-3.3.6.jar
-RUN wget -P /opt/flink/plugins/s3/ https://repo.maven.apache.org/maven2/software/amazon/awssdk/s3/2.25.12/s3-2.25.12.jar
+# Hadoop S3 support + HDFS classes (required by Iceberg FlinkCatalogFactory)
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-s3-fs-hadoop/${FLINK_VERSION}/flink-s3-fs-hadoop-${FLINK_VERSION}.jar
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/hadoop/hadoop-common/3.3.6/hadoop-common-3.3.6.jar
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/hadoop/hadoop-hdfs-client/3.3.6/hadoop-hdfs-client-3.3.6.jar
 
-# Download and install Jackson for JSON processing
-RUN wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/com/fasterxml/jackson/core/jackson-databind/2.15.3/jackson-databind-2.15.3.jar
-RUN wget -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.15.3/jackson-datatype-jsr310-2.15.3.jar
+# Caffeine cache (required by Iceberg REST catalog)
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/com/github/ben-manes/caffeine/caffeine/3.1.8/caffeine-3.1.8.jar
 
-# Set permissions
-RUN chown -R flink:flink /opt/flink/plugins
+# HTTP client (for REST catalog communication)
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.2.1/httpclient5-5.2.1.jar
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5/5.2.1/httpcore5-5.2.1.jar
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-h2/5.2.1/httpcore5-h2-5.2.1.jar
+
 RUN chown -R flink:flink /opt/flink/lib
-
-# Switch back to flink user
 USER flink

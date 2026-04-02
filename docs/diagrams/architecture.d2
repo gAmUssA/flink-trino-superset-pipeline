@@ -1,0 +1,222 @@
+direction: right
+
+title: {
+  label: Flink-Trino-Superset Pipeline Architecture
+  near: top-center
+  shape: text
+  style.font-size: 24
+  style.bold: true
+}
+
+# --- Data Ingestion Layer ---
+ingestion: Data Ingestion {
+  style.fill: "#f0fdf4"
+  style.stroke: "#16a34a"
+  style.font-color: "#14532d"
+
+  generator: Data Generator {
+    shape: hexagon
+    style.fill: "#bbf7d0"
+    style.stroke: "#16a34a"
+    style.font-color: "#14532d"
+    label: |md
+      **Data Generator**
+      Python + Faker
+    |
+  }
+
+  kafka: Apache Kafka {
+    style.fill: "#fefce8"
+    style.stroke: "#ca8a04"
+    style.font-color: "#713f12"
+    label: |md
+      **Apache Kafka 3.9**
+      KRaft Mode
+    |
+
+    user_activity: user-activity {
+      shape: parallelogram
+      style.fill: "#fef9c3"
+      style.stroke: "#ca8a04"
+      style.font-color: "#713f12"
+    }
+    sensor_data: sensor-data {
+      shape: parallelogram
+      style.fill: "#fef9c3"
+      style.stroke: "#ca8a04"
+      style.font-color: "#713f12"
+    }
+  }
+
+  generator -> kafka.user_activity: JSON events {
+    style.stroke: "#16a34a"
+    style.font-color: "#14532d"
+  }
+  generator -> kafka.sensor_data: JSON events {
+    style.stroke: "#16a34a"
+    style.font-color: "#14532d"
+  }
+}
+
+# --- Stream Processing Layer ---
+processing: Stream Processing {
+  style.fill: "#eff6ff"
+  style.stroke: "#2563eb"
+  style.font-color: "#1e3a5f"
+
+  flink: Apache Flink 1.20 {
+    style.fill: "#dbeafe"
+    style.stroke: "#2563eb"
+    style.font-color: "#1e3a5f"
+
+    jm: JobManager :8081 {
+      shape: rectangle
+      style.fill: "#93c5fd"
+      style.stroke: "#1d4ed8"
+      style.font-color: "#1e3a5f"
+    }
+    tm: TaskManager (4 slots) {
+      shape: rectangle
+      style.fill: "#93c5fd"
+      style.stroke: "#1d4ed8"
+      style.font-color: "#1e3a5f"
+    }
+
+    jobs: Flink Jobs {
+      style.fill: "#bfdbfe"
+      style.stroke: "#2563eb"
+      style.font-color: "#1e3a5f"
+
+      ua: UserActivityProcessor {
+        style.font-color: "#1e3a5f"
+      }
+      sd: SensorDataProcessor {
+        style.font-color: "#1e3a5f"
+      }
+      mc: MessageCounterJob {
+        style.font-color: "#1e3a5f"
+      }
+    }
+
+    sql_client: SQL Client {
+      shape: page
+      style.fill: "#bfdbfe"
+      style.stroke: "#2563eb"
+      style.font-color: "#1e3a5f"
+    }
+
+    jm -> tm: coordinate {
+      style.stroke: "#2563eb"
+    }
+  }
+}
+
+# --- Storage Layer ---
+storage: Lakehouse Storage {
+  style.fill: "#fef2f2"
+  style.stroke: "#dc2626"
+  style.font-color: "#7f1d1d"
+
+  iceberg_rest: Iceberg REST Catalog :8181 {
+    shape: cylinder
+    style.fill: "#fca5a5"
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+  }
+
+  s3: SeaweedFS (S3) {
+    shape: stored_data
+    style.fill: "#fecaca"
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+    label: |md
+      **SeaweedFS**
+      S3-compatible :9000
+    |
+
+    warehouse: s3://warehouse {
+      shape: package
+      style.fill: "#fee2e2"
+      style.stroke: "#dc2626"
+      style.font-color: "#7f1d1d"
+
+      ua_table: warehouse.user_activity {
+        style.fill: "#ffffff"
+        style.stroke: "#dc2626"
+        style.font-color: "#7f1d1d"
+      }
+      sd_table: warehouse.sensor_data {
+        style.fill: "#ffffff"
+        style.stroke: "#dc2626"
+        style.font-color: "#7f1d1d"
+      }
+    }
+  }
+
+  iceberg_rest -> s3.warehouse: metadata + data {
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+  }
+}
+
+# --- Analytics Layer ---
+analytics: Analytics & Visualization {
+  style.fill: "#faf5ff"
+  style.stroke: "#9333ea"
+  style.font-color: "#581c87"
+
+  trino: Trino :8082 {
+    shape: rectangle
+    style.fill: "#d8b4fe"
+    style.stroke: "#9333ea"
+    style.font-color: "#581c87"
+    label: |md
+      **Trino Coordinator**
+      Distributed SQL Engine
+    |
+  }
+
+  superset: Superset :8088 {
+    shape: rectangle
+    style.fill: "#e9d5ff"
+    style.stroke: "#9333ea"
+    style.font-color: "#581c87"
+    label: |md
+      **Apache Superset 4.1.1**
+      Dashboards & Visualization
+    |
+  }
+
+  trino -> superset: SQLAlchemy {
+    style.stroke: "#9333ea"
+    style.font-color: "#581c87"
+  }
+}
+
+# --- Connections between layers ---
+ingestion.kafka.user_activity -> processing.flink.jobs.ua: consume {
+  style.stroke: "#ca8a04"
+  style.font-color: "#713f12"
+}
+ingestion.kafka.sensor_data -> processing.flink.jobs.sd: consume {
+  style.stroke: "#ca8a04"
+  style.font-color: "#713f12"
+}
+ingestion.kafka.sensor_data -> processing.flink.jobs.mc: consume {
+  style.stroke: "#ca8a04"
+  style.font-color: "#713f12"
+}
+
+processing.flink.jobs.ua -> storage.iceberg_rest: write via Iceberg {
+  style.stroke: "#2563eb"
+  style.font-color: "#1e3a5f"
+}
+processing.flink.jobs.sd -> storage.iceberg_rest: write via Iceberg {
+  style.stroke: "#2563eb"
+  style.font-color: "#1e3a5f"
+}
+
+storage.iceberg_rest -> analytics.trino: read Iceberg tables {
+  style.stroke: "#9333ea"
+  style.font-color: "#581c87"
+}

@@ -13,11 +13,20 @@ This document summarizes the key learnings and issues addressed in the Flink-Tri
 [source,mermaid]
 ----
 flowchart LR
-    DG[Data Generator] --> K[Apache Kafka]
-    K --> F[Apache Flink]
-    F --> I[Apache Iceberg]
-    I --> T[Trino]
-    T --> S[Apache Superset]
+    A[Data Generator] -->|Produces Events| B[Kafka]
+    B -->|Consumes Events| C[Flink]
+    C -->|Processes Data| D[Iceberg]
+    D -->|Stores Tables| E[Trino]
+    E -->|Queries Data| F[Superset]
+    F -->|Visualizes| G[Dashboards]
+
+    style A fill:#f9d5e5,stroke:#333,stroke-width:2px
+    style B fill:#eeeeee,stroke:#333,stroke-width:2px
+    style C fill:#d5e8f9,stroke:#333,stroke-width:2px
+    style D fill:#e5f9d5,stroke:#333,stroke-width:2px
+    style E fill:#f9e5d5,stroke:#333,stroke-width:2px
+    style F fill:#d5f9e5,stroke:#333,stroke-width:2px
+    style G fill:#e5d5f9,stroke:#333,stroke-width:2px
 ----
 
 The pipeline consists of the following components:
@@ -52,6 +61,51 @@ The pipeline consists of the following components:
 
 6. *Superset* connects to Trino for data visualization and dashboarding
 
+== 📁 Project Structure
+
+[source]
+----
+.
+├── data-generator/              # Data generator application (uses Confluent Kafka library)
+│   ├── Dockerfile               # Docker image definition
+│   ├── requirements.txt         # Python dependencies
+│   └── data_generator.py        # Data generator script (configurable via property files)
+├── config/                      # Configuration files
+│   ├── cloud/                   # Cloud environment configuration
+│   │   ├── kafka.properties     # Confluent Cloud Kafka configuration
+│   │   └── topics.properties    # Kafka topic names for cloud
+│   └── local/                   # Local environment configuration
+│       ├── kafka.properties     # Local Kafka configuration
+│       └── topics.properties    # Kafka topic names for local
+├── docker-compose.yml           # Docker Compose configuration
+├── flink-jobs/                  # Flink processing jobs
+│   ├── build.gradle.kts         # Gradle build configuration
+│   ├── settings.gradle.kts      # Gradle settings
+│   ├── create_tables.sql        # SQL script to create Iceberg tables
+│   ├── sql-jobs/                # Flink SQL jobs
+│   │   ├── user-activity-to-iceberg.sql  # SQL job for user activity data
+│   │   └── sensor-data-to-iceberg.sql    # SQL job for sensor data
+│   └── src/                     # Source code for Java-based jobs
+│       └── main/
+│           └── java/
+│               └── com/
+│                   └── example/
+│                       ├── UserActivityProcessor.java  # User activity processor
+│                       └── SensorDataProcessor.java    # Sensor data processor
+├── trino/                       # Trino configuration
+│   └── etc/                     # Trino configuration files
+│       ├── config.properties    # Server configuration
+│       ├── jvm.config           # JVM configuration
+│       ├── node.properties      # Node configuration
+│       ├── log.properties       # Logging configuration
+│       └── catalog/             # Catalog configurations
+│           ├── iceberg.properties  # Iceberg catalog
+│           └── memory.properties   # Memory catalog
+├── Makefile                     # Project automation
+├── requirements.adoc            # Project requirements
+└── README.adoc                  # Project documentation
+----
+
 == 🔍 Key Components Analysis
 
 === Data Generator
@@ -62,24 +116,38 @@ The data generator is a Python application that:
 * Produces two types of events: user activity and sensor data
 * Sends data to Kafka topics with configurable rates
 * Simulates real-world patterns with randomized data
+* Supports both local and cloud (Confluent Cloud) Kafka environments
+
+The data generator is configurable via property files located in the `config/` directory:
+
+* `config/local/` - Configuration for local Kafka development
+  * `kafka.properties` - Local Kafka connection settings
+  * `topics.properties` - Kafka topic names for local environment
+* `config/cloud/` - Configuration for Confluent Cloud
+  * `kafka.properties` - Confluent Cloud Kafka connection settings
+  * `topics.properties` - Kafka topic names for cloud environment
+
+The environment can be switched by setting the `KAFKA_ENV` environment variable to either `local` or `cloud`.
 
 === Flink Jobs
 
-Two Flink streaming jobs process data from Kafka:
+The project uses Flink SQL for data processing, following the recommended approach of using Flink Table API or SQL instead of the DataStream API. Two main SQL jobs process data from Kafka:
 
-==== UserActivityProcessor
+==== user-activity-to-iceberg.sql
 
-* Consumes from the `user-activity` Kafka topic
-* Processes user events (page views, clicks, searches, purchases)
-* Extracts fields like user_id, event_type, timestamp, session_id
-* Currently writes to a file sink (CSV format)
+* Defines a Kafka source table that reads from the `user-activity` topic
+* Creates an Iceberg sink table for storing processed user activity data
+* Transforms and inserts data from Kafka to Iceberg
+* Includes watermark definitions for event time processing
+* Handles JSON parsing with error tolerance
 
-==== SensorDataProcessor
+==== sensor-data-to-iceberg.sql
 
-* Consumes from the `sensor-data` Kafka topic
-* Processes sensor readings (temperature, humidity, pressure, etc.)
-* Extracts fields like sensor_id, sensor_type, timestamp, location
-* Currently writes to a file sink (CSV format)
+* Defines a Kafka source table that reads from the `sensor-data` topic
+* Creates an Iceberg sink table for storing processed sensor data
+* Transforms and inserts data from Kafka to Iceberg
+* Includes watermark definitions for event time processing
+* Handles nested JSON structures (e.g., location data with lat/lon/facility)
 
 === Iceberg Tables
 
@@ -138,15 +206,18 @@ Provides statistics on sensor readings by hour, type, and facility.
 
 == 🚨 Identified Issues and Improvements
 
-=== 1. Flink Job Configuration Issues
+=== 1. Flink SQL Implementation
 
-*Issue*: The Flink jobs are currently writing to file sinks instead of Iceberg tables.
+*Issue*: ✅ RESOLVED - The initial Java-based Flink jobs were writing to file sinks instead of Iceberg tables.
 
-*Solution*: Update the Flink jobs to use the Flink Iceberg connector to write directly to Iceberg tables. This would involve:
+*Solution*: The project now uses Flink SQL jobs to process data from Kafka and write directly to Iceberg tables. This approach:
 
-1. Adding Iceberg dependencies to the build.gradle.kts file
-2. Configuring Iceberg catalog in the Flink jobs
-3. Using the Iceberg sink instead of the file sink
+1. Follows the recommended practice of using Flink Table API or SQL instead of DataStream API
+2. Simplifies the code by using declarative SQL instead of imperative Java
+3. Provides better integration with Iceberg through the Flink SQL connector
+4. Includes proper configuration for the Iceberg catalog and S3 storage
+
+The implementation can be found in the `flink-jobs/sql-jobs/` directory, with separate SQL files for user activity and sensor data processing.
 
 === 2. Java Version Mismatch
 
@@ -166,57 +237,68 @@ tasks.withType<KotlinCompile> {
 }
 ----
 
-=== 3. Kafka Configuration
+=== 3. Kafka Configuration and Multi-Environment Support
 
-*Issue*: The README mentions Zookeeper, but the docker-compose.yml is correctly configured for Kafka in KRaft mode without Zookeeper.
+*Issue*: ✅ RESOLVED - The project needed to support both local Kafka and Confluent Cloud environments.
 
-*Solution*: Update the README to reflect the current Kafka configuration using KRaft mode.
+*Solution*: The project now includes:
 
-=== 4. Timestamp Handling
+1. A structured `config/` directory with separate configurations for local and cloud environments
+2. Kafka in KRaft mode (without Zookeeper) for the local environment
+3. Configuration for Confluent Cloud for the cloud environment
+4. Environment switching via the `KAFKA_ENV` environment variable
+5. Proper documentation in the README.adoc file
 
-*Issue*: The Flink jobs are not properly parsing the timestamp strings into Flink's timestamp types.
+This approach allows developers to easily switch between local development and cloud deployment without code changes.
 
-*Solution*: Add proper timestamp parsing in the Flink jobs:
+=== 4. Timestamp Handling and Event Time Processing
 
-[source,java]
-----
-// Parse timestamp
-String timestampStr = jsonNode.get("timestamp").asText();
-Timestamp timestamp = Timestamp.valueOf(LocalDateTime.parse(timestampStr, DateTimeFormatter.ISO_DATE_TIME));
-----
+*Issue*: ✅ RESOLVED - The initial implementation lacked proper timestamp handling for event time processing.
 
-=== 5. Error Handling
+*Solution*: The Flink SQL jobs now include:
 
-*Issue*: The Flink jobs lack robust error handling for malformed data.
+1. Proper timestamp parsing with ISO-8601 format support:
+   ```sql
+   'json.timestamp-format.standard' = 'ISO-8601'
+   ```
 
-*Solution*: Add error handling and dead-letter queues for processing failures:
+2. Watermark definitions for event time processing:
+   ```sql
+   WATERMARK FOR `timestamp` AS `timestamp` - INTERVAL '5' SECOND
+   ```
 
-[source,java]
-----
-// Add a side output for invalid records
-final OutputTag<String> invalidRecordsTag = new OutputTag<String>("invalid-records"){};
+3. Separate event_time and processing_time fields in the sink tables:
+   ```sql
+   event_time TIMESTAMP(3),
+   ...
+   processing_time TIMESTAMP(3)
+   ```
 
-// Process with error handling
-SingleOutputStreamOperator<Tuple7<...>> processedStream = 
-    kafkaStream.process(new ProcessFunction<String, Tuple7<...>>() {
-        @Override
-        public void processElement(String value, Context ctx, Collector<Tuple7<...>> out) {
-            try {
-                // Process record
-                // ...
-                out.collect(result);
-            } catch (Exception e) {
-                // Send to invalid records side output
-                ctx.output(invalidRecordsTag, "Error processing record: " + value + ", Error: " + e.getMessage());
-            }
-        }
-    });
+This approach enables proper event time processing, handling of out-of-order events, and analysis of processing latency.
 
-// Get the invalid records stream
-DataStream<String> invalidRecords = processedStream.getSideOutput(invalidRecordsTag);
-// Write invalid records to a separate sink for later analysis
-invalidRecords.sinkTo(...);
-----
+=== 5. Error Handling for Malformed Data
+
+*Issue*: ✅ RESOLVED - The initial implementation lacked robust error handling for malformed data.
+
+*Solution*: The Flink SQL jobs now include error handling for malformed JSON data:
+
+1. JSON parsing errors are ignored to prevent job failures:
+   ```sql
+   'json.ignore-parse-errors' = 'true'
+   ```
+
+2. Proper JSON format configuration:
+   ```sql
+   'format' = 'json',
+   'json.timestamp-format.standard' = 'ISO-8601'
+   ```
+
+3. Handling of nested JSON structures (e.g., location data):
+   ```sql
+   location ROW<lat DOUBLE, lon DOUBLE, facility STRING>
+   ```
+
+This approach ensures that the pipeline is resilient to data quality issues and can continue processing valid records even when some records are malformed.
 
 === 6. Makefile Improvements
 
@@ -226,32 +308,49 @@ invalidRecords.sinkTo(...);
 
 === 7. Documentation Format
 
-*Issue*: Some documentation is in Markdown format instead of AsciiDoc as specified in the guidelines.
+*Issue*: ✅ RESOLVED - Some documentation was in Markdown format instead of AsciiDoc as specified in the guidelines.
 
-*Solution*: Convert README.md to README.adoc using the AsciiDoc format.
+*Solution*: The project documentation has been converted to AsciiDoc format:
+
+1. README.adoc now uses AsciiDoc format with proper formatting, tables, and diagrams
+2. requirements.adoc contains the project requirements in AsciiDoc format
+3. project_learnings.adoc (this document) uses AsciiDoc format
+4. VERIFY.adoc provides verification steps in AsciiDoc format
+
+The documentation now follows the guidelines:
+* Uses one sentence per line in AsciiDoc
+* Includes emoji for better readability
+* Uses Mermaid diagrams inside docs
+* Provides comprehensive information about the project structure and components
 
 == 🛠️ Best Practices
 
 === Flink Development
 
-1. *Use Flink Table API or SQL*: According to the guidelines, prefer using Flink Table API or Flink SQL instead of the DataStream API for simpler processing logic.
+1. *Use Flink SQL*: The project now follows the guideline to prefer Flink SQL over the DataStream API:
+   * SQL jobs in the `flink-jobs/sql-jobs/` directory
+   * Declarative approach for defining sources, transformations, and sinks
+   * Better readability and maintainability
+   * Easier integration with Iceberg
 
-2. *Proper Checkpoint Configuration*: Configure checkpointing for fault tolerance:
-   ```java
-   env.enableCheckpointing(60000); // Checkpoint every minute
-   env.getCheckpointConfig().setCheckpointTimeout(30000);
-   env.getCheckpointConfig().setMinPauseBetweenCheckpoints(30000);
+2. *Event Time Processing*: The SQL jobs implement proper event time processing:
+   ```sql
+   WATERMARK FOR `timestamp` AS `timestamp` - INTERVAL '5' SECOND
    ```
 
-3. *Watermark Strategy*: Implement proper watermark strategies for event time processing:
-   ```java
-   WatermarkStrategy<JsonNode> watermarkStrategy = 
-       WatermarkStrategy
-           .<JsonNode>forBoundedOutOfOrderness(Duration.ofSeconds(5))
-           .withTimestampAssigner((event, timestamp) -> {
-               // Extract timestamp from event
-               return extractTimestamp(event);
-           });
+3. *Error Handling*: The SQL jobs include error handling for malformed data:
+   ```sql
+   'json.ignore-parse-errors' = 'true'
+   ```
+
+4. *Iceberg Integration*: Direct integration with Iceberg through the Flink SQL connector:
+   ```sql
+   CREATE CATALOG iceberg_catalog WITH (
+     'type'='iceberg',
+     'catalog-impl'='org.apache.iceberg.rest.RESTCatalog',
+     'uri'='http://iceberg-rest:8181',
+     'warehouse'='s3://warehouse/'
+   )
    ```
 
 === Docker and Infrastructure

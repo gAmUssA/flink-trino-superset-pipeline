@@ -40,22 +40,25 @@ dependencies {
 
     // Iceberg integration for Flink
     implementation("org.apache.iceberg:iceberg-flink-runtime-1.20:$icebergVersion")
-    implementation("org.apache.iceberg:iceberg-aws:$icebergVersion")
-    implementation("org.apache.iceberg:iceberg-core:$icebergVersion")
+    implementation("org.apache.iceberg:iceberg-aws-bundle:$icebergVersion")
 
-    // AWS S3 dependencies
+    // Hadoop S3 support
     implementation("org.apache.flink:flink-s3-fs-hadoop:$flinkVersion")
-    implementation("org.apache.hadoop:hadoop-aws:3.3.6")
-    implementation("org.apache.hadoop:hadoop-common:3.3.6")
-    implementation("software.amazon.awssdk:s3:2.25.12")
 
     // Logging
     implementation("org.slf4j:slf4j-api:2.0.17")
     implementation("ch.qos.logback:logback-classic:1.4.14")
 
+    // Caffeine cache (required by Iceberg REST catalog)
+    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+
     // Jackson for JSON processing
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.3")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.3")
+
+    // Test
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 java {
@@ -65,6 +68,15 @@ java {
 
 tasks.withType<KotlinCompile> {
     kotlinOptions.jvmTarget = "17"
+}
+
+tasks.test {
+    useJUnitPlatform()
+    testLogging {
+        events("passed", "skipped", "failed")
+        showStandardStreams = false
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.SHORT
+    }
 }
 
 tasks.jar {

@@ -9,7 +9,6 @@ gradle-app.setting
 *.iml
 *.iws
 *.ipr
-*.iws
 out/
 
 # Mac
@@ -23,17 +22,12 @@ Desktop.ini
 .env
 docker-compose.override.yml
 
-# Minio data directories
-minio-data/
-
 # Java
 *.class
 *.jar
+!superset/dashboard_export.zip
 *.war
 *.ear
-*.zip
-*.tar.gz
-*.rar
 hs_err_pid*
 
 # Python
@@ -43,7 +37,6 @@ __pycache__/
 *.so
 .Python
 env/
-build/
 develop-eggs/
 dist/
 downloads/
@@ -70,3 +63,19 @@ temp/
 
 # History files
 .history/
+
+# Tessl / MCP / Agent tooling (local dev only)
+.tessl/
+.mcp.json
+tessl.json
+.agents/
+.codex/
+.cursor/
+.vscode/
+.github/skills/
+
+# Claude
+.claude/
+
+# Temp output
+.output.txt

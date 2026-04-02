@@ -1,5 +1,6 @@
 package com.example;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.Table;
@@ -7,7 +8,6 @@ import org.apache.flink.table.api.TableDescriptor;
 import org.apache.flink.table.api.TableEnvironment;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.Expressions;
-import org.apache.flink.types.Row;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,9 +20,12 @@ public class SensorDataProcessor {
     private static final Logger LOG = LoggerFactory.getLogger(SensorDataProcessor.class);
 
     public static void main(String[] args) throws Exception {
-        // Set up the table environment
+        // Set up the table environment with checkpointing (required for Iceberg commits)
+        Configuration config = new Configuration();
+        config.setString("execution.checkpointing.interval", "30s");
         EnvironmentSettings settings = EnvironmentSettings.newInstance()
                 .inStreamingMode()
+                .withConfiguration(config)
                 .build();
         TableEnvironment tableEnv = TableEnvironment.create(settings);
 
@@ -40,7 +43,7 @@ public class SensorDataProcessor {
                         .column("battery_level", DataTypes.DOUBLE())
                         .column("reading", DataTypes.DOUBLE())
                         .column("unit", DataTypes.STRING())
-                        .watermark("timestamp", "timestamp - INTERVAL '5' SECOND")
+                        .watermark("timestamp", "`timestamp` - INTERVAL '5' SECOND")
                         .build())
                 .option("connector", "kafka")
                 .option("topic", "sensor-data")
@@ -52,10 +55,10 @@ public class SensorDataProcessor {
                 .option("json.timestamp-format.standard", "ISO-8601")
                 .build());
 
-        // Configure Iceberg catalog
+        // Configure Iceberg catalog (REST catalog per official docs)
         tableEnv.executeSql("CREATE CATALOG iceberg_catalog WITH (" +
                 "'type'='iceberg'," +
-                "'catalog-impl'='org.apache.iceberg.rest.RESTCatalog'," +
+                "'catalog-type'='rest'," +
                 "'uri'='http://iceberg-rest:8181'," +
                 "'warehouse'='s3://warehouse/'," +
                 "'io-impl'='org.apache.iceberg.aws.s3.S3FileIO'," +
@@ -68,11 +71,11 @@ public class SensorDataProcessor {
 
         // Use the catalog and create database
         tableEnv.executeSql("USE CATALOG iceberg_catalog");
-        tableEnv.executeSql("CREATE DATABASE IF NOT EXISTS db");
-        tableEnv.executeSql("USE db");
+        tableEnv.executeSql("CREATE DATABASE IF NOT EXISTS warehouse");
+        tableEnv.executeSql("USE warehouse");
 
-        // Create the sink table
-        tableEnv.executeSql("CREATE TABLE IF NOT EXISTS sensor_sink (" +
+        // Create the Iceberg sink table
+        tableEnv.executeSql("CREATE TABLE IF NOT EXISTS sensor_data (" +
                 "sensor_id STRING," +
                 "sensor_type STRING," +
                 "event_time TIMESTAMP(3)," +
@@ -84,33 +87,29 @@ public class SensorDataProcessor {
                 "unit STRING," +
                 "processing_time TIMESTAMP(3)," +
                 "PRIMARY KEY (sensor_id) NOT ENFORCED" +
-                ") WITH (" +
-                "'format' = 'parquet'," +
-                "'write-format' = 'parquet'" +
                 ")");
 
-        // Get the source table
-        Table sourceTable = tableEnv.from("sensor_source");
+        // Get the source table (fully qualified — it lives in the default catalog)
+        Table sourceTable = tableEnv.from("default_catalog.default_database.sensor_source");
 
-        // Transform the data
+        // Transform the data — use .get() for nested ROW field access
         Table resultTable = sourceTable.select(
                 $("sensor_id"),
                 $("sensor_type"),
                 $("timestamp").as("event_time"),
-                $("location.lat").as("latitude"),
-                $("location.lon").as("longitude"),
-                $("location.facility").as("facility"),
+                $("location").get("lat").as("latitude"),
+                $("location").get("lon").as("longitude"),
+                $("location").get("facility").as("facility"),
                 $("battery_level"),
                 $("reading"),
                 $("unit"),
                 Expressions.callSql("CURRENT_TIMESTAMP").as("processing_time")
         );
 
-        // Print the result schema for debugging
-        LOG.info("Result schema: {}", resultTable.getSchema());
+        LOG.info("Result schema: {}", resultTable.getResolvedSchema());
 
-        // Insert the data into the sink table
-        resultTable.executeInsert("sensor_sink");
+        // Insert the data into the Iceberg sink table
+        resultTable.executeInsert("sensor_data");
 
         LOG.info("Sensor Data Processor job submitted");
     }

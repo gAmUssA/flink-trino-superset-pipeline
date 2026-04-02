@@ -1,5 +1,6 @@
 package com.example;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.Table;
@@ -7,7 +8,6 @@ import org.apache.flink.table.api.TableDescriptor;
 import org.apache.flink.table.api.TableEnvironment;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.Expressions;
-import org.apache.flink.types.Row;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,9 +20,12 @@ public class UserActivityProcessor {
     private static final Logger LOG = LoggerFactory.getLogger(UserActivityProcessor.class);
 
     public static void main(String[] args) throws Exception {
-        // Set up the table environment
+        // Set up the table environment with checkpointing (required for Iceberg commits)
+        Configuration config = new Configuration();
+        config.setString("execution.checkpointing.interval", "30s");
         EnvironmentSettings settings = EnvironmentSettings.newInstance()
                 .inStreamingMode()
+                .withConfiguration(config)
                 .build();
         TableEnvironment tableEnv = TableEnvironment.create(settings);
 
@@ -45,7 +48,7 @@ public class UserActivityProcessor {
                         .column("product_ids", DataTypes.ARRAY(DataTypes.STRING()))
                         .column("total_amount", DataTypes.DOUBLE())
                         .column("currency", DataTypes.STRING())
-                        .watermark("timestamp", "timestamp - INTERVAL '5' SECOND")
+                        .watermark("timestamp", "`timestamp` - INTERVAL '5' SECOND")
                         .build())
                 .option("connector", "kafka")
                 .option("topic", "user-activity")
@@ -57,10 +60,10 @@ public class UserActivityProcessor {
                 .option("json.timestamp-format.standard", "ISO-8601")
                 .build());
 
-        // Configure Iceberg catalog
+        // Configure Iceberg catalog (REST catalog per official docs)
         tableEnv.executeSql("CREATE CATALOG iceberg_catalog WITH (" +
                 "'type'='iceberg'," +
-                "'catalog-impl'='org.apache.iceberg.rest.RESTCatalog'," +
+                "'catalog-type'='rest'," +
                 "'uri'='http://iceberg-rest:8181'," +
                 "'warehouse'='s3://warehouse/'," +
                 "'io-impl'='org.apache.iceberg.aws.s3.S3FileIO'," +
@@ -73,11 +76,11 @@ public class UserActivityProcessor {
 
         // Use the catalog and create database
         tableEnv.executeSql("USE CATALOG iceberg_catalog");
-        tableEnv.executeSql("CREATE DATABASE IF NOT EXISTS db");
-        tableEnv.executeSql("USE db");
+        tableEnv.executeSql("CREATE DATABASE IF NOT EXISTS warehouse");
+        tableEnv.executeSql("USE warehouse");
 
-        // Create the sink table
-        tableEnv.executeSql("CREATE TABLE IF NOT EXISTS user_activity_sink (" +
+        // Create the Iceberg sink table
+        tableEnv.executeSql("CREATE TABLE IF NOT EXISTS user_activity (" +
                 "user_id STRING," +
                 "event_type STRING," +
                 "event_time TIMESTAMP(3)," +
@@ -96,13 +99,10 @@ public class UserActivityProcessor {
                 "currency STRING," +
                 "processing_time TIMESTAMP(3)," +
                 "PRIMARY KEY (user_id, session_id) NOT ENFORCED" +
-                ") WITH (" +
-                "'format' = 'parquet'," +
-                "'write-format' = 'parquet'" +
                 ")");
 
-        // Get the source table
-        Table sourceTable = tableEnv.from("user_activity_source");
+        // Get the source table (fully qualified — it lives in the default catalog)
+        Table sourceTable = tableEnv.from("default_catalog.default_database.user_activity_source");
 
         // Transform the data
         Table resultTable = sourceTable.select(
@@ -125,11 +125,10 @@ public class UserActivityProcessor {
                 Expressions.callSql("CURRENT_TIMESTAMP").as("processing_time")
         );
 
-        // Print the result schema for debugging
-        LOG.info("Result schema: {}", resultTable.getSchema());
+        LOG.info("Result schema: {}", resultTable.getResolvedSchema());
 
-        // Insert the data into the sink table
-        resultTable.executeInsert("user_activity_sink");
+        // Insert the data into the Iceberg sink table
+        resultTable.executeInsert("user_activity");
 
         LOG.info("User Activity Processor job submitted");
     }

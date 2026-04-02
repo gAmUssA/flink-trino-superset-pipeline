@@ -1,7 +1,7 @@
--- Set up the Iceberg catalog
+-- Set up the Iceberg catalog (REST catalog per official docs)
 CREATE CATALOG iceberg_catalog WITH (
   'type'='iceberg',
-  'catalog-impl'='org.apache.iceberg.rest.RESTCatalog',
+  'catalog-type'='rest',
   'uri'='http://iceberg-rest:8181',
   'warehouse'='s3://warehouse/',
   'io-impl'='org.apache.iceberg.aws.s3.S3FileIO',
@@ -14,14 +14,14 @@ CREATE CATALOG iceberg_catalog WITH (
 
 -- Use the catalog and create database
 USE CATALOG iceberg_catalog;
-CREATE DATABASE IF NOT EXISTS db;
-USE db;
+CREATE DATABASE IF NOT EXISTS warehouse;
+USE warehouse;
 
 -- Define Kafka Source Table
 CREATE TABLE IF NOT EXISTS user_activity_source (
   user_id STRING,
   event_type STRING,
-  timestamp TIMESTAMP(3),
+  `timestamp` TIMESTAMP(3),
   session_id STRING,
   ip_address STRING,
   user_agent STRING,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS user_activity_source (
   product_ids ARRAY<STRING>,
   total_amount DOUBLE,
   currency STRING,
-  WATERMARK FOR timestamp AS timestamp - INTERVAL '5' SECOND
+  WATERMARK FOR `timestamp` AS `timestamp` - INTERVAL '5' SECOND
 ) WITH (
   'connector' = 'kafka',
   'topic' = 'user-activity',
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS user_activity_source (
 );
 
 -- Define Iceberg Sink Table
-CREATE TABLE IF NOT EXISTS user_activity_sink (
+CREATE TABLE IF NOT EXISTS user_activity (
   user_id STRING,
   event_type STRING,
   event_time TIMESTAMP(3),
@@ -67,17 +67,14 @@ CREATE TABLE IF NOT EXISTS user_activity_sink (
   currency STRING,
   processing_time TIMESTAMP(3),
   PRIMARY KEY (user_id, session_id) NOT ENFORCED
-) WITH (
-  'format' = 'parquet',
-  'write-format' = 'parquet'
 );
 
 -- Insert data from source to sink with transformation
-INSERT INTO user_activity_sink 
-SELECT 
+INSERT INTO user_activity
+SELECT
   user_id,
   event_type,
-  timestamp AS event_time,
+  `timestamp` AS event_time,
   session_id,
   ip_address,
   user_agent,

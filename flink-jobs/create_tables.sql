@@ -1,38 +1,10 @@
--- Create the Iceberg catalog in Trino
+-- Ensure the Iceberg warehouse schema exists in Trino
+-- Tables are created by Flink jobs via the Iceberg REST catalog
 CREATE SCHEMA IF NOT EXISTS iceberg.warehouse;
 
--- Create user_activity table
-CREATE TABLE IF NOT EXISTS iceberg.warehouse.user_activity (
-    user_id VARCHAR,
-    event_type VARCHAR,
-    event_time TIMESTAMP(6),
-    session_id VARCHAR,
-    ip_address VARCHAR,
-    user_agent VARCHAR,
-    page_url VARCHAR,
-    total_amount DOUBLE
-)
-WITH (
-    format = 'PARQUET',
-    partitioning = ARRAY['day(event_time)']
-);
-
--- Create sensor_data table
-CREATE TABLE IF NOT EXISTS iceberg.warehouse.sensor_data (
-    sensor_id VARCHAR,
-    sensor_type VARCHAR,
-    event_time TIMESTAMP(6),
-    latitude DOUBLE,
-    longitude DOUBLE,
-    facility VARCHAR,
-    sensor_value DOUBLE
-)
-WITH (
-    format = 'PARQUET',
-    partitioning = ARRAY['day(event_time)', 'sensor_type']
-);
-
 -- Create aggregated views for analytics
+-- These views query the Iceberg tables created by Flink
+
 CREATE OR REPLACE VIEW iceberg.warehouse.hourly_user_activity AS
 SELECT
     date_trunc('hour', event_time) AS hour,
@@ -50,9 +22,9 @@ SELECT
     sensor_type,
     facility,
     COUNT(*) AS reading_count,
-    AVG(sensor_value) AS avg_value,
-    MIN(sensor_value) AS min_value,
-    MAX(sensor_value) AS max_value
+    AVG(reading) AS avg_value,
+    MIN(reading) AS min_value,
+    MAX(reading) AS max_value
 FROM
     iceberg.warehouse.sensor_data
 GROUP BY

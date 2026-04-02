@@ -4,6 +4,15 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 6 * * 1'  # Monday 6am UTC
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker-compose.yml'
+      - 'flink/Dockerfile'
+      - 'superset/Dockerfile'
+      - 'data-generator/Dockerfile'
+      - 'seaweedfs/**'
+      - 'trino/**'
 
 jobs:
   infra-smoketest:

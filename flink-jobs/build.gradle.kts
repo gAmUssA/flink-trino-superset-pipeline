@@ -14,7 +14,7 @@ repositories {
 
 val flinkVersion = "1.20.3"
 val icebergVersion = "1.10.1" 
-val kafkaConnectorVersion = "3.4.0-1.20"
+val kafkaConnectorVersion = "4.0.1-2.0"
 
 dependencies {
     // Apache Flink dependencies

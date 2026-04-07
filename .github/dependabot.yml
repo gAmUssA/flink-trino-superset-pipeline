@@ -15,8 +15,8 @@ updates:
       jackson:
         patterns: ["com.fasterxml.jackson*"]
 
-  # Python dependencies
-  - package-ecosystem: pip
+  # Python dependencies (uv/pyproject.toml)
+  - package-ecosystem: uv
     directory: /data-generator
     schedule:
       interval: weekly

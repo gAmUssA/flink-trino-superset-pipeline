@@ -53,10 +53,8 @@
   "gradle": {
     "enabled": true
   },
-  "pip_requirements": {
-    "fileMatch": [
-      "^requirements\\.txt$"
-    ]
+  "pep621": {
+    "enabled": true
   },
   "ignorePaths": [
     "**/node_modules/**",

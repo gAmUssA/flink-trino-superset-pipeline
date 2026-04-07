@@ -36,14 +36,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        working-directory: data-generator
-        run: pip install -r requirements.txt
+      - uses: astral-sh/setup-uv@v6
 
       - name: Run smoke tests
         working-directory: data-generator
-        run: python -m pytest test_data_generator.py -v
+        run: uv run pytest test_data_generator.py -v

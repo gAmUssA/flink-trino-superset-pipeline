@@ -6,8 +6,8 @@ Demonstrates Iceberg's engine independence: Flink writes the data,
 Trino serves it, and DuckDB can query it directly from S3 storage.
 
 Usage:
-    uv pip install duckdb
-    python scripts/duckdb_query.py
+    make duckdb
+    # or: uv run --with duckdb scripts/duckdb_query.py
 
 Requires the pipeline to be running (docker-compose up) so that
 SeaweedFS (S3) and the Iceberg REST catalog are accessible.
@@ -22,17 +22,25 @@ def main():
     # Install and load the Iceberg extension
     conn.sql("INSTALL iceberg; LOAD iceberg;")
 
+    # Create S3 credentials secret for SeaweedFS
+    conn.sql("""
+        CREATE SECRET s3_secret (
+            TYPE S3,
+            KEY_ID 'minioadmin',
+            SECRET 'minioadmin',
+            REGION 'us-east-1',
+            ENDPOINT 'localhost:9000',
+            URL_STYLE 'path',
+            USE_SSL false
+        );
+    """)
+
     # Attach the Iceberg REST catalog (same one Flink and Trino use)
     conn.sql("""
         ATTACH '' AS iceberg (
             TYPE ICEBERG,
-            ENDPOINT_URL 'http://localhost:9000',
-            URL_STYLE 'path',
-            AUTH_TYPE 'S3',
-            CATALOG_TYPE 'rest',
-            CATALOG_URI 'http://localhost:8181',
-            KEY 'minioadmin',
-            SECRET 'minioadmin'
+            ENDPOINT 'http://localhost:8181',
+            AUTHORIZATION_TYPE 'none'
         );
     """)
 
@@ -85,15 +93,6 @@ def main():
             ROUND(SUM(total_amount), 2) AS total_revenue
         FROM iceberg.warehouse.user_activity
         WHERE event_type = 'purchase'
-    """).show()
-
-    # ── Iceberg Metadata ───────────────────────────────────
-    print("\n── Iceberg Snapshots (sensor_data) ──")
-    conn.sql("""
-        SELECT *
-        FROM iceberg.warehouse.sensor_data.snapshots
-        ORDER BY committed_at DESC
-        LIMIT 5
     """).show()
 
     print("\nDone. Same Parquet files, no Trino — that's Iceberg portability.")

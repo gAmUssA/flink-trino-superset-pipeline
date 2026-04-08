@@ -219,9 +219,8 @@ schema-evolution: wait-for-trino
 .PHONY: duckdb
 duckdb:
 	@echo "$(BOLD)$(CYAN)Querying Iceberg tables with DuckDB (no Trino)$(RESET)"
-	@command -v python3 > /dev/null 2>&1 || (echo "$(RED)python3 not found$(RESET)" && exit 1)
-	@python3 -c "import duckdb" 2>/dev/null || (echo "$(RED)duckdb not installed — run: pip install duckdb$(RESET)" && exit 1)
-	python3 scripts/duckdb_query.py
+	@command -v uv > /dev/null 2>&1 || (echo "$(RED)uv not found — install with: curl -LsSf https://astral.sh/uv/install.sh | sh$(RESET)" && exit 1)
+	uv run --with duckdb scripts/duckdb_query.py
 
 # ── Verify ──────────────────────────────────────────────
 

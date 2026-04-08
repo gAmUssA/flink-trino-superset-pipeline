@@ -56,9 +56,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "confluent-kafka", specifier = ">=2.8.2" },
+    { name = "confluent-kafka", specifier = ">=2.13.2" },
     { name = "faker", specifier = ">=11.4.0" },
-    { name = "python-dateutil", specifier = ">=2.8.2" },
+    { name = "python-dateutil", specifier = ">=2.9.0" },
 ]
 
 [package.metadata.requires-dev]

@@ -53,15 +53,13 @@ Kafka topic names are defined in `topics.properties`:
 [source,bash]
 ----
 # Install dependencies
-pip install -r requirements.txt
+uv sync
 
 # Run with local configuration
-export KAFKA_ENV=local
-python data_generator.py
+KAFKA_ENV=local uv run python data_generator.py
 
 # Run with cloud configuration
-export KAFKA_ENV=cloud
-python data_generator.py
+KAFKA_ENV=cloud uv run python data_generator.py
 ----
 
 == Running with Docker 🐳

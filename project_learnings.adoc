@@ -84,7 +84,7 @@ The export zip is baked into the Docker image so `make setup-superset` restores 
 
 === Trino connection URI
 The correct SQLAlchemy URI for Superset is `trino://admin@trino-coordinator:8080/iceberg/warehouse`.
-The `trino` pip package alone is insufficient -- also install `sqlalchemy-trino`.
+The `trino` package alone is insufficient -- also install `sqlalchemy-trino`.
 
 == Dependency Gotchas
 

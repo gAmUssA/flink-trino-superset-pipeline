@@ -1,0 +1,200 @@
+direction: down
+
+title: {
+  label: Iceberg Time Travel — Snapshot-Based Queries
+  near: top-center
+  shape: text
+  style.font-size: 24
+  style.bold: true
+}
+
+# --- Flink Checkpoint Commits ---
+commits: Flink Checkpoints → Iceberg Snapshots {
+  style.fill: "#eff6ff"
+  style.stroke: "#2563eb"
+  style.font-color: "#1e3a5f"
+
+  cp1: |md
+    **Checkpoint @ t₁**
+    30s interval
+  | {
+    shape: step
+    style.fill: "#bfdbfe"
+    style.stroke: "#2563eb"
+    style.font-color: "#1e3a5f"
+  }
+
+  cp2: |md
+    **Checkpoint @ t₂**
+    30s interval
+  | {
+    shape: step
+    style.fill: "#bfdbfe"
+    style.stroke: "#2563eb"
+    style.font-color: "#1e3a5f"
+  }
+
+  cp3: |md
+    **Checkpoint @ t₃**
+    30s interval
+  | {
+    shape: step
+    style.fill: "#93c5fd"
+    style.stroke: "#1d4ed8"
+    style.font-color: "#1e3a5f"
+  }
+
+  cp1 -> cp2: {style.stroke: "#2563eb"}
+  cp2 -> cp3: {style.stroke: "#2563eb"}
+}
+
+# --- Iceberg Snapshot Chain ---
+snapshots: Iceberg Snapshot Chain {
+  style.fill: "#fef2f2"
+  style.stroke: "#dc2626"
+  style.font-color: "#7f1d1d"
+
+  s1: |md
+    **Snapshot #1**
+    operation: append
+    added-records: 100
+    total-records: 100
+  | {
+    shape: rectangle
+    style.fill: "#fecaca"
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+    style.border-radius: 4
+  }
+
+  s2: |md
+    **Snapshot #2**
+    operation: append
+    added-records: 150
+    total-records: 250
+  | {
+    shape: rectangle
+    style.fill: "#fecaca"
+    style.stroke: "#dc2626"
+    style.font-color: "#7f1d1d"
+    style.border-radius: 4
+  }
+
+  s3: |md
+    **Snapshot #3** ← current
+    operation: append
+    added-records: 150
+    total-records: 400
+  | {
+    shape: rectangle
+    style.fill: "#fca5a5"
+    style.stroke: "#b91c1c"
+    style.font-color: "#7f1d1d"
+    style.border-radius: 4
+    style.bold: true
+  }
+
+  s1 -> s2: parent_id {style.stroke: "#dc2626"; style.font-color: "#7f1d1d"}
+  s2 -> s3: parent_id {style.stroke: "#dc2626"; style.font-color: "#7f1d1d"}
+}
+
+# --- S3 Data Files ---
+storage: SeaweedFS (S3) {
+  style.fill: "#f8fafc"
+  style.stroke: "#94a3b8"
+  style.font-color: "#334155"
+
+  f1: |md
+    **data-001.parquet**
+    100 records
+  | {
+    shape: page
+    style.fill: "#e2e8f0"
+    style.stroke: "#94a3b8"
+    style.font-color: "#334155"
+  }
+
+  f2: |md
+    **data-002.parquet**
+    150 records
+  | {
+    shape: page
+    style.fill: "#e2e8f0"
+    style.stroke: "#94a3b8"
+    style.font-color: "#334155"
+  }
+
+  f3: |md
+    **data-003.parquet**
+    150 records
+  | {
+    shape: page
+    style.fill: "#e2e8f0"
+    style.stroke: "#94a3b8"
+    style.font-color: "#334155"
+  }
+}
+
+# --- Query Examples ---
+queries: Time Travel Queries {
+  style.fill: "#faf5ff"
+  style.stroke: "#9333ea"
+  style.font-color: "#581c87"
+
+  q_current: |md
+    **SELECT * FROM sensor_data**
+    Returns 400 records
+    (current snapshot)
+  | {
+    shape: rectangle
+    style.fill: "#e9d5ff"
+    style.stroke: "#9333ea"
+    style.font-color: "#581c87"
+    style.border-radius: 4
+  }
+
+  q_past: |md
+    **SELECT * FROM sensor_data
+    FOR TIMESTAMP AS OF t₁**
+    Returns 100 records
+    (historical snapshot)
+  | {
+    shape: rectangle
+    style.fill: "#e9d5ff"
+    style.stroke: "#9333ea"
+    style.font-color: "#581c87"
+    style.border-radius: 4
+  }
+
+  q_version: |md
+    **SELECT * FROM sensor_data
+    FOR VERSION AS OF #2**
+    Returns 250 records
+    (specific snapshot)
+  | {
+    shape: rectangle
+    style.fill: "#e9d5ff"
+    style.stroke: "#9333ea"
+    style.font-color: "#581c87"
+    style.border-radius: 4
+  }
+}
+
+# --- Connections ---
+# Checkpoints create snapshots
+commits.cp1 -> snapshots.s1: commit {style.stroke: "#2563eb"; style.font-color: "#1e3a5f"}
+commits.cp2 -> snapshots.s2: commit {style.stroke: "#2563eb"; style.font-color: "#1e3a5f"}
+commits.cp3 -> snapshots.s3: commit {style.stroke: "#2563eb"; style.font-color: "#1e3a5f"}
+
+# Snapshots reference data files
+snapshots.s1 -> storage.f1: manifest {style.stroke: "#dc2626"; style.stroke-dash: 3; style.font-color: "#7f1d1d"}
+snapshots.s2 -> storage.f1: {style.stroke: "#dc2626"; style.stroke-dash: 3; style.opacity: 0.4}
+snapshots.s2 -> storage.f2: manifest {style.stroke: "#dc2626"; style.stroke-dash: 3; style.font-color: "#7f1d1d"}
+snapshots.s3 -> storage.f1: {style.stroke: "#dc2626"; style.stroke-dash: 3; style.opacity: 0.4}
+snapshots.s3 -> storage.f2: {style.stroke: "#dc2626"; style.stroke-dash: 3; style.opacity: 0.4}
+snapshots.s3 -> storage.f3: manifest {style.stroke: "#dc2626"; style.stroke-dash: 3; style.font-color: "#7f1d1d"}
+
+# Queries resolve to snapshots
+queries.q_current -> snapshots.s3: {style.stroke: "#9333ea"; style.font-color: "#581c87"}
+queries.q_past -> snapshots.s1: {style.stroke: "#9333ea"; style.font-color: "#581c87"}
+queries.q_version -> snapshots.s2: {style.stroke: "#9333ea"; style.font-color: "#581c87"}

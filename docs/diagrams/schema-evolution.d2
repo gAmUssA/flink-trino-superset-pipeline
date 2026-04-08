@@ -1,0 +1,149 @@
+direction: down
+
+title: {
+  label: Iceberg Schema Evolution — Add Columns Without Rewriting Data
+  near: top-center
+  shape: text
+  style.font-size: 24
+  style.bold: true
+}
+
+# --- Original Schema ---
+before: Original Schema {
+  style.fill: "#eff6ff"
+  style.stroke: "#2563eb"
+  style.font-color: "#1e3a5f"
+
+  schema: warehouse.sensor_data {
+    shape: sql_table
+    style.fill: "#dbeafe"
+    style.stroke: "#2563eb"
+    style.font-color: "#1e3a5f"
+
+    sensor_id: STRING
+    sensor_type: STRING
+    event_time: TIMESTAMP
+    reading: DOUBLE
+    unit: STRING
+  }
+
+  files: "Existing Parquet Files\ndata-001.parquet (100 rows)\ndata-002.parquet (150 rows)\ndata-003.parquet (150 rows)" {
+    shape: page
+    style.fill: "#bfdbfe"
+    style.stroke: "#2563eb"
+    style.font-color: "#1e3a5f"
+  }
+
+  schema -> files: written by Flink {
+    style.stroke: "#2563eb"
+    style.font-color: "#1e3a5f"
+  }
+}
+
+# --- ALTER TABLE ---
+alter: "ALTER TABLE sensor_data\nADD COLUMN alert_threshold DOUBLE" {
+  shape: step
+  style.fill: "#fef9c3"
+  style.stroke: "#ca8a04"
+  style.font-color: "#713f12"
+  style.bold: true
+}
+
+# --- Evolved Schema ---
+after: Evolved Schema {
+  style.fill: "#f0fdf4"
+  style.stroke: "#16a34a"
+  style.font-color: "#14532d"
+
+  schema: warehouse.sensor_data {
+    shape: sql_table
+    style.fill: "#bbf7d0"
+    style.stroke: "#16a34a"
+    style.font-color: "#14532d"
+
+    sensor_id: STRING
+    sensor_type: STRING
+    event_time: TIMESTAMP
+    reading: DOUBLE
+    unit: STRING
+    alert_threshold: DOUBLE {
+      style.bold: true
+      style.font-color: "#b91c1c"
+    }
+  }
+}
+
+# --- Data Files After Evolution ---
+data: Data Files {
+  style.fill: "#f8fafc"
+  style.stroke: "#94a3b8"
+  style.font-color: "#334155"
+
+  old_files: "Old files — NOT rewritten\ndata-001.parquet\ndata-002.parquet\ndata-003.parquet\nalert_threshold → NULL" {
+    shape: page
+    style.fill: "#e2e8f0"
+    style.stroke: "#94a3b8"
+    style.font-color: "#334155"
+  }
+
+  new_files: "New files — include column\ndata-004.parquet\ndata-005.parquet\nalert_threshold → 42.5" {
+    shape: page
+    style.fill: "#bbf7d0"
+    style.stroke: "#16a34a"
+    style.font-color: "#14532d"
+  }
+}
+
+# --- Query Result ---
+result: Query Result {
+  style.fill: "#faf5ff"
+  style.stroke: "#9333ea"
+  style.font-color: "#581c87"
+
+  query: "SELECT sensor_id, reading, alert_threshold\nFROM sensor_data" {
+    shape: rectangle
+    style.fill: "#e9d5ff"
+    style.stroke: "#9333ea"
+    style.font-color: "#581c87"
+    style.border-radius: 4
+  }
+
+  output: {
+    shape: sql_table
+    style.fill: "#e9d5ff"
+    style.stroke: "#9333ea"
+    style.font-color: "#581c87"
+
+    "sensor-1  23.4  NULL": old row
+    "sensor-2  67.8  NULL": old row
+    "sensor-3  45.1  50.0": new row
+    "sensor-4  31.2  42.5": new row
+  }
+
+  query -> output {style.stroke: "#9333ea"}
+}
+
+# --- Key Insight ---
+insight: "No data rewrite. No downtime. No compaction needed.\nIceberg only updates metadata — old Parquet files are untouched." {
+  shape: text
+  style.font-size: 16
+  style.font-color: "#713f12"
+  style.bold: true
+}
+
+# --- Connections ---
+before -> alter: {style.stroke: "#ca8a04"; style.font-color: "#713f12"}
+alter -> after: metadata-only change {style.stroke: "#16a34a"; style.font-color: "#14532d"}
+
+after.schema -> data.old_files: reads with NULL padding {
+  style.stroke: "#94a3b8"
+  style.stroke-dash: 3
+  style.font-color: "#334155"
+}
+after.schema -> data.new_files: reads with real values {
+  style.stroke: "#16a34a"
+  style.font-color: "#14532d"
+}
+
+data.old_files -> result.query: {style.stroke: "#9333ea"; style.stroke-dash: 3; style.opacity: 0.6}
+data.new_files -> result.query: {style.stroke: "#9333ea"; style.stroke-dash: 3; style.opacity: 0.6}

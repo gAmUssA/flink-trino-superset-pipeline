@@ -12,13 +12,12 @@ repositories {
     mavenCentral()
 }
 
-val flinkVersion = "1.20.3"
-val icebergVersion = "1.10.1" 
-val kafkaConnectorVersion = "3.4.0-1.20"
+val flinkVersion = "2.2.0"
+val icebergVersion = "1.10.1"
+val kafkaConnectorVersion = "4.0.1-2.0"
 
 dependencies {
-    // Apache Flink dependencies
-    implementation("org.apache.flink:flink-java:$flinkVersion")
+    // Apache Flink 2.x dependencies (flink-java removed in 2.x)
     implementation("org.apache.flink:flink-streaming-java:$flinkVersion")
     implementation("org.apache.flink:flink-clients:$flinkVersion")
     implementation("org.apache.flink:flink-table-api-java-bridge:$flinkVersion")
@@ -29,7 +28,7 @@ dependencies {
     implementation("org.apache.flink:flink-table-runtime:$flinkVersion")
     implementation("org.apache.flink:flink-table-planner-loader:$flinkVersion")
 
-    // Flink Kafka connector
+    // Flink Kafka connector (4.x for Flink 2.x)
     implementation("org.apache.flink:flink-sql-connector-kafka:$kafkaConnectorVersion")
 
     // Flink File connector
@@ -38,8 +37,8 @@ dependencies {
     // Flink JSON serialization
     implementation("org.apache.flink:flink-json:$flinkVersion")
 
-    // Iceberg integration for Flink
-    implementation("org.apache.iceberg:iceberg-flink-runtime-1.20:$icebergVersion")
+    // Iceberg integration for Flink (iceberg-flink-runtime-2.0 for Flink 2.x)
+    implementation("org.apache.iceberg:iceberg-flink-runtime-2.0:$icebergVersion")
     implementation("org.apache.iceberg:iceberg-aws-bundle:$icebergVersion")
 
     // Hadoop S3 support

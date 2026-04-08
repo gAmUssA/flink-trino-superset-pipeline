@@ -1,8 +1,8 @@
-FROM flink:1.20.3-java17
+FROM flink:2.2.0-java17
 
-ENV FLINK_VERSION=1.20.3
+ENV FLINK_VERSION=2.2.0
 ENV ICEBERG_VERSION=1.10.1
-ENV KAFKA_CONNECTOR_VERSION=3.4.0-1.20
+ENV KAFKA_CONNECTOR_VERSION=4.0.1-2.0
 
 USER root
 RUN apt-get update && \
@@ -12,12 +12,12 @@ RUN apt-get update && \
 
 RUN mkdir -p /opt/flink/lib
 
-# Flink connectors
+# Flink connectors (4.x for Flink 2.x)
 RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/${KAFKA_CONNECTOR_VERSION}/flink-sql-connector-kafka-${KAFKA_CONNECTOR_VERSION}.jar
 RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-json/${FLINK_VERSION}/flink-json-${FLINK_VERSION}.jar
 
-# Iceberg runtime (includes core + Flink integration)
-RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/iceberg/iceberg-flink-runtime-1.20/${ICEBERG_VERSION}/iceberg-flink-runtime-1.20-${ICEBERG_VERSION}.jar
+# Iceberg runtime for Flink 2.0 (covers Flink 2.x)
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/iceberg/iceberg-flink-runtime-2.0/${ICEBERG_VERSION}/iceberg-flink-runtime-2.0-${ICEBERG_VERSION}.jar
 
 # Iceberg AWS bundle (includes iceberg-aws + full AWS SDK v2, shaded)
 RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar

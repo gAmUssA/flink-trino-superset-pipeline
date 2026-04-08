@@ -288,11 +288,11 @@ verify-demo:
 diagrams:
 	@echo "$(CYAN)Rendering D2 diagrams...$(RESET)"
 	@command -v d2 > /dev/null 2>&1 || (echo "$(RED)d2 not found — install with: brew install d2$(RESET)" && exit 1)
-	d2 docs/diagrams/architecture.d2 docs/diagrams/architecture.svg
-	d2 docs/diagrams/data-flow.d2 docs/diagrams/data-flow.svg
-	d2 docs/diagrams/docker-services.d2 docs/diagrams/docker-services.svg
-	d2 docs/diagrams/time-travel.d2 docs/diagrams/time-travel.svg
-	d2 docs/diagrams/schema-evolution.d2 docs/diagrams/schema-evolution.svg
+	d2 --sketch docs/diagrams/architecture.d2 docs/diagrams/architecture.svg
+	d2 --sketch docs/diagrams/data-flow.d2 docs/diagrams/data-flow.svg
+	d2 --sketch docs/diagrams/docker-services.d2 docs/diagrams/docker-services.svg
+	d2 --sketch docs/diagrams/time-travel.d2 docs/diagrams/time-travel.svg
+	d2 --sketch docs/diagrams/schema-evolution.d2 docs/diagrams/schema-evolution.svg
 	@echo "$(GREEN)Diagrams rendered$(RESET)"
 
 # ── URLs ────────────────────────────────────────────────

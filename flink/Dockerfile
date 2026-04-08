@@ -1,4 +1,4 @@
-FROM flink:1.20.0-java17
+FROM flink:1.20.3-java17@sha256:b90e8c9d3a0ee5cda479eedc9fe1c1788d7ab3574114fd3d49ccf6b5bd2ebfe6
 
 ENV FLINK_VERSION=1.20.0
 ENV ICEBERG_VERSION=1.8.1

@@ -50,7 +50,7 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.4.14")
 
     // Caffeine cache (required by Iceberg REST catalog)
-    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+    implementation("com.github.ben-manes.caffeine:caffeine:3.2.3")
 
     // Jackson for JSON processing
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.3")

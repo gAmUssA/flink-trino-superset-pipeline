@@ -1,7 +1,7 @@
-FROM flink:1.20.0-java17
+FROM flink:1.20.3-java17
 
-ENV FLINK_VERSION=1.20.0
-ENV ICEBERG_VERSION=1.8.1
+ENV FLINK_VERSION=1.20.3
+ENV ICEBERG_VERSION=1.10.1
 ENV KAFKA_CONNECTOR_VERSION=3.4.0-1.20
 
 USER root
@@ -28,7 +28,7 @@ RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/h
 RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/hadoop/hadoop-hdfs-client/3.3.6/hadoop-hdfs-client-3.3.6.jar
 
 # Caffeine cache (required by Iceberg REST catalog)
-RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/com/github/ben-manes/caffeine/caffeine/3.1.8/caffeine-3.1.8.jar
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/com/github/ben-manes/caffeine/caffeine/3.2.3/caffeine-3.2.3.jar
 
 # HTTP client (for REST catalog communication)
 RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.2.1/httpclient5-5.2.1.jar

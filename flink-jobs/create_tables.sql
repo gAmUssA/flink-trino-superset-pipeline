@@ -41,7 +41,7 @@ CREATE OR REPLACE VIEW iceberg.warehouse.sensor_data_snapshots AS
 SELECT
     snapshot_id,
     parent_id,
-    committed_at,
+    CAST(committed_at AS timestamp(6) with time zone) AS committed_at,
     operation,
     summary
 FROM iceberg.warehouse."sensor_data$snapshots";
@@ -51,7 +51,7 @@ CREATE OR REPLACE VIEW iceberg.warehouse.user_activity_snapshots AS
 SELECT
     snapshot_id,
     parent_id,
-    committed_at,
+    CAST(committed_at AS timestamp(6) with time zone) AS committed_at,
     operation,
     summary
 FROM iceberg.warehouse."user_activity$snapshots";
@@ -91,7 +91,7 @@ ALTER TABLE iceberg.warehouse.user_activity ADD COLUMN IF NOT EXISTS device_type
 CREATE OR REPLACE VIEW iceberg.warehouse.iceberg_commit_log AS
 SELECT
     snapshot_id,
-    committed_at,
+    CAST(committed_at AS timestamp(6) with time zone) AS committed_at,
     operation,
     TRY_CAST(summary['added-records'] AS BIGINT) AS added_records,
     TRY_CAST(summary['total-records'] AS BIGINT) AS total_records,

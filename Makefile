@@ -49,6 +49,11 @@ help:
 	@echo "$(BOLD)Docs:$(RESET)"
 	@echo "  $(YELLOW)diagrams$(RESET)          - Render D2 diagrams to SVG"
 	@echo ""
+	@echo "$(BOLD)Iceberg Features:$(RESET)"
+	@echo "  $(YELLOW)time-travel$(RESET)       - Show Iceberg snapshots and time-travel queries"
+	@echo "  $(YELLOW)schema-evolution$(RESET)  - Demo adding columns without rewriting data"
+	@echo "  $(YELLOW)duckdb$(RESET)            - Query Iceberg tables locally via DuckDB (no Trino)"
+	@echo ""
 	@echo "$(BOLD)Verify:$(RESET)"
 	@echo "  $(YELLOW)smoketest$(RESET)         - Check all containers are running"
 	@echo "  $(YELLOW)verify-data-flow$(RESET)  - Query Iceberg tables via Trino"
@@ -173,6 +178,51 @@ wait-for-data:
 		sleep 2; \
 	done
 
+# ── Iceberg Features ───────────────────────────────────
+
+.PHONY: time-travel
+time-travel: wait-for-trino
+	@echo "$(BOLD)$(CYAN)Iceberg Time Travel$(RESET)"
+	@echo ""
+	@echo "$(BOLD)Sensor data snapshots (each = a Flink checkpoint commit):$(RESET)"
+	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+		--execute "SELECT snapshot_id, committed_at, operation FROM iceberg.warehouse.\"sensor_data\$$snapshots\" ORDER BY committed_at DESC LIMIT 5" 2>/dev/null || \
+		echo "  $(RED)Table not found - deploy Flink jobs first$(RESET)"
+	@echo ""
+	@echo "$(BOLD)Record count — now vs 5 minutes ago:$(RESET)"
+	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+		--execute "SELECT (SELECT COUNT(*) FROM warehouse.sensor_data) AS current_count, (SELECT COUNT(*) FROM warehouse.sensor_data FOR TIMESTAMP AS OF (current_timestamp - interval '5' minute)) AS past_count" 2>/dev/null || \
+		echo "  $(YELLOW)Not enough history yet - wait a few minutes$(RESET)"
+
+.PHONY: schema-evolution
+schema-evolution: wait-for-trino
+	@echo "$(BOLD)$(CYAN)Iceberg Schema Evolution$(RESET)"
+	@echo ""
+	@echo "$(BOLD)Adding alert_threshold column to sensor_data...$(RESET)"
+	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+		--execute "ALTER TABLE iceberg.warehouse.sensor_data ADD COLUMN IF NOT EXISTS alert_threshold DOUBLE" 2>/dev/null && \
+		echo "  $(GREEN)Column added (old rows return NULL, no data rewrite)$(RESET)"
+	@echo ""
+	@echo "$(BOLD)Adding device_type column to user_activity...$(RESET)"
+	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+		--execute "ALTER TABLE iceberg.warehouse.user_activity ADD COLUMN IF NOT EXISTS device_type VARCHAR" 2>/dev/null && \
+		echo "  $(GREEN)Column added$(RESET)"
+	@echo ""
+	@echo "$(BOLD)Verify — sensor_data schema now includes alert_threshold:$(RESET)"
+	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+		--execute "DESCRIBE iceberg.warehouse.sensor_data" 2>/dev/null
+	@echo ""
+	@echo "$(BOLD)Verify — NULLs for old rows (schema evolution in action):$(RESET)"
+	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+		--execute "SELECT sensor_id, sensor_type, reading, alert_threshold FROM iceberg.warehouse.sensor_data LIMIT 5" 2>/dev/null
+
+.PHONY: duckdb
+duckdb:
+	@echo "$(BOLD)$(CYAN)Querying Iceberg tables with DuckDB (no Trino)$(RESET)"
+	@command -v python3 > /dev/null 2>&1 || (echo "$(RED)python3 not found$(RESET)" && exit 1)
+	@python3 -c "import duckdb" 2>/dev/null || (echo "$(RED)duckdb not installed — run: pip install duckdb$(RESET)" && exit 1)
+	python3 scripts/duckdb_query.py
+
 # ── Verify ──────────────────────────────────────────────
 
 .PHONY: smoketest
@@ -241,6 +291,8 @@ diagrams:
 	d2 docs/diagrams/architecture.d2 docs/diagrams/architecture.svg
 	d2 docs/diagrams/data-flow.d2 docs/diagrams/data-flow.svg
 	d2 docs/diagrams/docker-services.d2 docs/diagrams/docker-services.svg
+	d2 docs/diagrams/time-travel.d2 docs/diagrams/time-travel.svg
+	d2 docs/diagrams/schema-evolution.d2 docs/diagrams/schema-evolution.svg
 	@echo "$(GREEN)Diagrams rendered$(RESET)"
 
 # ── URLs ────────────────────────────────────────────────

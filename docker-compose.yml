@@ -91,7 +91,7 @@ services:
         heartbeat.interval: 1000
         heartbeat.timeout: 5000
         rest.flamegraph.enabled: true
-        web.upload.dir: /opt/flink/usrlib
+        web.upload.dir: /tmp/flink-web-upload
         classloader.resolve-order: parent-first
         classloader.parent-first-patterns: org.apache.flink.table.factories.Factory,org.apache.iceberg.
     volumes:

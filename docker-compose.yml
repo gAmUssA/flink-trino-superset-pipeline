@@ -86,7 +86,7 @@ services:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: flink-jobmanager
-        state.backend: filesystem
+        state.backend: hashmap
         state.checkpoints.dir: file:///opt/flink/checkpoints
         heartbeat.interval: 1000
         heartbeat.timeout: 5000
@@ -119,7 +119,7 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.numberOfTaskSlots: 4
-        state.backend: filesystem
+        state.backend: hashmap
         state.checkpoints.dir: file:///opt/flink/checkpoints
         heartbeat.interval: 1000
         heartbeat.timeout: 5000

@@ -101,6 +101,63 @@ jobs:
           docker logs data-generator 2>&1 | grep -q "Generated" || \
             (echo "Data generator not producing"; exit 1)
 
+      - name: Deploy Flink jobs and verify they stay RUNNING
+        run: |
+          # Deploy both jobs
+          docker cp flink-jobs/build/libs/user-activity-processor-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
+          docker exec flink-jobmanager flink run -d -c com.example.UserActivityProcessor /opt/flink/usrlib/user-activity-processor-1.0-SNAPSHOT.jar
+          docker cp flink-jobs/build/libs/sensor-data-processor-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
+          docker exec flink-jobmanager flink run -d -c com.example.SensorDataProcessor /opt/flink/usrlib/sensor-data-processor-1.0-SNAPSHOT.jar
+
+          # Wait for jobs to either stabilize or fail
+          sleep 15
+
+          # Check that both jobs are RUNNING (not FAILED)
+          RUNNING=$(docker exec flink-jobmanager flink list 2>/dev/null | grep -c "RUNNING" || echo "0")
+          FAILED=$(docker exec flink-jobmanager flink list -a 2>/dev/null | grep -c "FAILED" || echo "0")
+          echo "Running: $RUNNING, Failed: $FAILED"
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::Flink jobs FAILED — check state backend config, classpath, or catalog connectivity"
+            # Print the exception for debugging
+            for job_id in $(docker exec flink-jobmanager flink list -a 2>/dev/null | grep FAILED | awk '{print $4}'); do
+              echo "=== Exception for job $job_id ==="
+              docker exec flink-jobmanager curl -s "http://localhost:8081/jobs/$job_id/exceptions" 2>/dev/null | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          for e in d.get('exceptionHistory',{}).get('entries',[]):
+              print(e['exceptionName'])
+              print(e['stacktrace'][:500])
+          " 2>/dev/null || true
+            done
+            exit 1
+          fi
+
+          if [ "$RUNNING" -lt 2 ]; then
+            echo "::error::Expected 2 running Flink jobs, found $RUNNING"
+            exit 1
+          fi
+          echo "Both Flink jobs are RUNNING"
+
+      - name: Verify data lands in Iceberg (wait for checkpoint)
+        run: |
+          echo "Waiting up to 90s for data in Iceberg tables..."
+          for i in $(seq 1 30); do
+            COUNT=$(docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+              --execute "SELECT COUNT(*) FROM warehouse.sensor_data" 2>/dev/null | tr -d ' "' || echo "0")
+            if [ "$COUNT" -gt 0 ] 2>/dev/null; then
+              echo "sensor_data has $COUNT rows"
+              break
+            fi
+            [ $i -eq 30 ] && echo "::error::No data in Iceberg after 90s — checkpointing may be broken" && exit 1
+            sleep 3
+          done
+          # Also check user_activity
+          UA_COUNT=$(docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+            --execute "SELECT COUNT(*) FROM warehouse.user_activity" 2>/dev/null | tr -d ' "' || echo "0")
+          echo "user_activity has $UA_COUNT rows"
+          [ "$UA_COUNT" -gt 0 ] || (echo "::error::No data in user_activity table" && exit 1)
+
       - name: Collect logs on failure
         if: failure()
         run: |

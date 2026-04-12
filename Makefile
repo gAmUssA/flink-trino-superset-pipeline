@@ -198,15 +198,9 @@ time-travel: wait-for-trino
 schema-evolution: wait-for-trino
 	@echo "$(BOLD)$(CYAN)Iceberg Schema Evolution$(RESET)"
 	@echo ""
-	@echo "$(BOLD)Adding alert_threshold column to sensor_data...$(RESET)"
-	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
-		--execute "ALTER TABLE iceberg.warehouse.sensor_data ADD COLUMN IF NOT EXISTS alert_threshold DOUBLE" 2>/dev/null && \
-		echo "  $(GREEN)Column added (old rows return NULL, no data rewrite)$(RESET)"
-	@echo ""
-	@echo "$(BOLD)Adding device_type column to user_activity...$(RESET)"
-	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
-		--execute "ALTER TABLE iceberg.warehouse.user_activity ADD COLUMN IF NOT EXISTS device_type VARCHAR" 2>/dev/null && \
-		echo "  $(GREEN)Column added$(RESET)"
+	@echo "$(BOLD)Adding columns and creating views...$(RESET)"
+	docker cp flink-jobs/schema_evolution.sql trino-coordinator:/tmp/
+	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg -f /tmp/schema_evolution.sql 2>/dev/null
 	@echo ""
 	@echo "$(BOLD)Verify — sensor_data schema now includes alert_threshold:$(RESET)"
 	@docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \

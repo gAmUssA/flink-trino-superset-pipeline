@@ -11,10 +11,9 @@ on:
       - 'flink/Dockerfile'
       - 'superset/Dockerfile'
       - 'data-generator/Dockerfile'
+      - 'data-generator/pyproject.toml'
       - 'seaweedfs/**'
       - 'trino/**'
-      - 'data-generator/Dockerfile'
-      - 'data-generator/requirements.txt'
 
 jobs:
   infra-smoketest:

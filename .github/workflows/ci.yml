@@ -41,3 +41,127 @@ jobs:
       - name: Run smoke tests
         working-directory: data-generator
         run: uv run pytest test_data_generator.py -v
+
+  infra-smoketest:
+    name: Infra Smoke Test
+    runs-on: ubuntu-latest
+    needs: [flink-jobs, data-generator]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          dependency-graph: disabled
+
+      - name: Build Flink JARs
+        working-directory: flink-jobs
+        run: ./gradlew buildAllJars
+
+      - name: Start services
+        run: docker compose up -d --build
+        timeout-minutes: 10
+
+      - name: Wait for services to be healthy
+        run: |
+          for svc_wait in "kafka 60" "minio 30" "iceberg-rest 30" "trino-coordinator 60"; do
+            svc=$(echo $svc_wait | cut -d' ' -f1)
+            max=$(echo $svc_wait | cut -d' ' -f2)
+            echo "Waiting for $svc..."
+            for i in $(seq 1 $max); do
+              docker compose ps "$svc" 2>/dev/null | grep -q "Up" && break
+              [ $i -eq $max ] && echo "Timeout waiting for $svc" && exit 1
+              sleep 2
+            done
+          done
+
+          echo "Waiting for Flink JobManager API..."
+          for i in $(seq 1 30); do
+            docker exec flink-jobmanager curl -sf http://localhost:8081/overview > /dev/null 2>&1 && break
+            sleep 2
+          done
+
+          echo "Waiting for Trino to accept queries..."
+          for i in $(seq 1 60); do
+            docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg --execute "SELECT 1" > /dev/null 2>&1 && break
+            sleep 2
+          done
+        timeout-minutes: 5
+
+      - name: All containers running
+        run: |
+          FAILED=0
+          for svc in kafka minio flink-jobmanager flink-taskmanager iceberg-rest trino-coordinator superset data-generator flink-sql-client; do
+            if docker compose ps "$svc" | grep -q "Up"; then
+              echo "✓ $svc"
+            else
+              echo "✗ $svc - NOT RUNNING"
+              FAILED=1
+            fi
+          done
+          [ $FAILED -eq 0 ] || exit 1
+
+      - name: Deploy Flink jobs and verify they stay RUNNING
+        run: |
+          docker cp flink-jobs/build/libs/user-activity-processor-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
+          docker exec flink-jobmanager flink run -d -c com.example.UserActivityProcessor /opt/flink/usrlib/user-activity-processor-1.0-SNAPSHOT.jar
+          docker cp flink-jobs/build/libs/sensor-data-processor-1.0-SNAPSHOT.jar flink-jobmanager:/opt/flink/usrlib/
+          docker exec flink-jobmanager flink run -d -c com.example.SensorDataProcessor /opt/flink/usrlib/sensor-data-processor-1.0-SNAPSHOT.jar
+
+          sleep 15
+
+          RUNNING=$(docker exec flink-jobmanager flink list 2>/dev/null | grep -c "RUNNING" || echo "0")
+          FAILED=$(docker exec flink-jobmanager flink list -a 2>/dev/null | grep -c "FAILED" || echo "0")
+          echo "Running: $RUNNING, Failed: $FAILED"
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::Flink jobs FAILED"
+            for job_id in $(docker exec flink-jobmanager flink list -a 2>/dev/null | grep FAILED | awk '{print $4}'); do
+              echo "=== Exception for $job_id ==="
+              docker exec flink-jobmanager curl -s "http://localhost:8081/jobs/$job_id/exceptions" 2>/dev/null | python3 -c "
+          import sys,json
+          for e in json.load(sys.stdin).get('exceptionHistory',{}).get('entries',[]):
+              print(e['stacktrace'][:500])
+          " 2>/dev/null || true
+            done
+            exit 1
+          fi
+          [ "$RUNNING" -ge 2 ] || (echo "::error::Expected 2 running jobs, found $RUNNING" && exit 1)
+          echo "Both Flink jobs are RUNNING"
+
+      - name: Verify data lands in Iceberg
+        run: |
+          echo "Waiting for checkpoint..."
+          for i in $(seq 1 30); do
+            COUNT=$(docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+              --execute "SELECT COUNT(*) FROM warehouse.sensor_data" 2>/dev/null | tr -d ' "' || echo "0")
+            if [ "$COUNT" -gt 0 ] 2>/dev/null; then
+              echo "sensor_data: $COUNT rows"
+              break
+            fi
+            [ $i -eq 30 ] && echo "::error::No data after 90s" && exit 1
+            sleep 3
+          done
+          UA=$(docker exec trino-coordinator trino --server localhost:8080 --catalog iceberg \
+            --execute "SELECT COUNT(*) FROM warehouse.user_activity" 2>/dev/null | tr -d ' "' || echo "0")
+          echo "user_activity: $UA rows"
+          [ "$UA" -gt 0 ] || (echo "::error::No user_activity data" && exit 1)
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          for svc in kafka minio flink-jobmanager flink-taskmanager iceberg-rest trino-coordinator superset data-generator; do
+            echo "=== $svc ==="
+            docker logs "$svc" 2>&1 | tail -30
+            echo ""
+          done
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

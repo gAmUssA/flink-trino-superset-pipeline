@@ -5,7 +5,7 @@ description = "Streaming data generator for Kafka (user activity + sensor data)"
 requires-python = ">=3.11"
 dependencies = [
     "confluent-kafka>=2.13.2",
-    "faker>=11.4.0",
+    "faker>=40.15.0",
     "python-dateutil>=2.9.0",
 ]
 

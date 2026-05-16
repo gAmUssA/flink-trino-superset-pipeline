@@ -1,4 +1,4 @@
-FROM apache/superset:4.1.1
+FROM apache/superset:6.1.0
 
 # Install system dependencies required for building Python packages
 USER root

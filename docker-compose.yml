@@ -1,7 +1,7 @@
 services:
   # Kafka - Message broker for data ingestion in KRaft mode
   kafka:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:3.9.0@sha256:fbc7d7c428e3755cf36518d4976596002477e4c052d1f80b5b9eafd06d0fff2f
     hostname: kafka
     ports:
       - "9092:9092"
@@ -34,7 +34,7 @@ services:
   # SeaweedFS - S3-compatible storage for Iceberg data (replaces MinIO)
   # See: https://rmoff.net/2026/01/14/alternatives-to-minio-for-single-node-local-s3/
   minio:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:latest@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5
     container_name: minio
     hostname: minio
     ports:
@@ -54,7 +54,7 @@ services:
 
   # Create S3 bucket for Iceberg warehouse
   s3-setup:
-    image: amazon/aws-cli:latest
+    image: amazon/aws-cli:latest@sha256:b6aeb95d19d7f5a8cae4eb814cb16739b6b2a4f2f46f427ada6a8c9a20d9881d
     container_name: s3-setup
     depends_on:
       minio:
@@ -132,7 +132,7 @@ services:
 
   # Iceberg REST Catalog - Metadata service for Iceberg tables
   iceberg-rest:
-    image: tabulario/iceberg-rest
+    image: tabulario/iceberg-rest@sha256:3b7d31bdfec626b68e97531c9778a1b9119659e456fe28545a49f6aa6a9ce472
     container_name: iceberg-rest
     ports:
       - "8181:8181"
@@ -151,7 +151,7 @@ services:
 
   # Trino Coordinator - SQL query engine
   trino-coordinator:
-    image: trinodb/trino:latest
+    image: trinodb/trino:latest@sha256:db58cc93e593a2706553745f276bb119c9810e69918be56ecde088ba7ccb0534
     container_name: trino-coordinator
     ports:
       - "8082:8080"

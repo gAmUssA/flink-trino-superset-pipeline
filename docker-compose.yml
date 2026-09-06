@@ -1,7 +1,7 @@
 services:
   # Kafka - Message broker for data ingestion in KRaft mode
   kafka:
-    image: apache/kafka:3.9.0
+    image: apache/kafka:3.9.2@sha256:05b4616e0702ef2729327705d54ad6b50ea70b271c4b730fabd2320789fb7b02
     hostname: kafka
     ports:
       - "9092:9092"

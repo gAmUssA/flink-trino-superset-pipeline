@@ -172,7 +172,7 @@ Configuration files in `config/local/` and `config/cloud/` define bootstrap serv
 │   │   └── schema-evolution.svg
 │   └── iceberg-guide.adoc               # Iceberg integration reference
 ├── flink/
-│   └── Dockerfile                   # Flink 1.20 + Iceberg 1.8.1 + Kafka connector
+│   └── Dockerfile                   # Flink 2.3 + Iceberg 1.12 + Kafka connector
 ├── flink-jobs/
 │   ├── build.gradle.kts             # Gradle build (3 fat JARs)
 │   ├── create_tables.sql            # Trino analytics views
@@ -191,7 +191,7 @@ Configuration files in `config/local/` and `config/cloud/` define bootstrap serv
 ├── seaweedfs/
 │   └── s3.json                      # S3 credentials config
 ├── superset/
-│   ├── Dockerfile                   # Superset 4.1.1 + trino driver
+│   ├── Dockerfile                   # Superset 6.1.0 + trino driver
 │   └── init_superset.sh
 ├── trino/
 │   └── etc/                         # Trino server + Iceberg catalog config
@@ -219,15 +219,15 @@ Configuration files in `config/local/` and `config/cloud/` define bootstrap serv
 |Component |Version |Role
 
 |Apache Kafka
-|3.9.0 (KRaft)
+|4.3.2 (KRaft)
 |Event streaming (no Zookeeper dependency)
 
 |Apache Flink
-|1.20.0
+|2.3.0
 |Stream processing via Table API and SQL
 
 |Apache Iceberg
-|1.8.1
+|1.12.0
 |Open table format with REST catalog
 
 |SeaweedFS
@@ -239,7 +239,7 @@ Configuration files in `config/local/` and `config/cloud/` define bootstrap serv
 |Distributed SQL query engine
 
 |Apache Superset
-|4.1.1
+|6.1.0
 |Data visualization and dashboarding
 |===
 

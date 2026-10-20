@@ -73,7 +73,7 @@ The checkpoint directory `/opt/flink/checkpoints` becomes unwritable.
 Fix: use the container's local filesystem instead of a shared volume.
 
 === Kafka KRaft mode
-Apache Kafka 3.9 runs in KRaft mode (no Zookeeper).
+Apache Kafka 4.3 runs in KRaft mode (no Zookeeper).
 Single-node setup with `KAFKA_PROCESS_ROLES=controller,broker`.
 
 == Superset

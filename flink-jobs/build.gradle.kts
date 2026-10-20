@@ -1,8 +1,5 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
 plugins {
     java
-    kotlin("jvm") version "1.9.22"
 }
 
 group = "com.example"
@@ -12,9 +9,9 @@ repositories {
     mavenCentral()
 }
 
-val flinkVersion = "2.2.0"
-val icebergVersion = "1.10.1"
-val kafkaConnectorVersion = "4.0.1-2.0"
+val flinkVersion = "2.3.0"
+val icebergVersion = "1.12.0"
+val kafkaConnectorVersion = "5.0.0-2.2"
 
 dependencies {
     // Apache Flink 2.x dependencies (flink-java removed in 2.x)
@@ -37,36 +34,32 @@ dependencies {
     // Flink JSON serialization
     implementation("org.apache.flink:flink-json:$flinkVersion")
 
-    // Iceberg integration for Flink (iceberg-flink-runtime-2.0 for Flink 2.x)
-    implementation("org.apache.iceberg:iceberg-flink-runtime-2.0:$icebergVersion")
+    // Iceberg integration for Flink (iceberg-flink-runtime-2.3 for Flink 2.x)
+    implementation("org.apache.iceberg:iceberg-flink-runtime-2.3:$icebergVersion")
     implementation("org.apache.iceberg:iceberg-aws-bundle:$icebergVersion")
 
     // Hadoop S3 support
     implementation("org.apache.flink:flink-s3-fs-hadoop:$flinkVersion")
 
     // Logging
-    implementation("org.slf4j:slf4j-api:2.0.17")
-    implementation("ch.qos.logback:logback-classic:1.4.14")
+    implementation("org.slf4j:slf4j-api:2.0.20")
+    implementation("ch.qos.logback:logback-classic:1.6.5")
 
     // Caffeine cache (required by Iceberg REST catalog)
-    implementation("com.github.ben-manes.caffeine:caffeine:3.2.3")
+    implementation("com.github.ben-manes.caffeine:caffeine:3.3.1")
 
     // Jackson for JSON processing
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.3")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.3")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.4")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.22.4")
 
     // Test
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.1.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
-}
-
-tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = "17"
 }
 
 tasks.test {

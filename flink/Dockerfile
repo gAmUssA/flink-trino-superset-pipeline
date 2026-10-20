@@ -1,8 +1,8 @@
-FROM flink:2.2.0-java17
+FROM flink:2.3.0-java17
 
-ENV FLINK_VERSION=2.2.0
-ENV ICEBERG_VERSION=1.10.1
-ENV KAFKA_CONNECTOR_VERSION=4.0.1-2.0
+ENV FLINK_VERSION=2.3.0
+ENV ICEBERG_VERSION=1.12.0
+ENV KAFKA_CONNECTOR_VERSION=5.0.0-2.2
 
 USER root
 RUN apt-get update && \
@@ -16,8 +16,8 @@ RUN mkdir -p /opt/flink/lib
 RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/${KAFKA_CONNECTOR_VERSION}/flink-sql-connector-kafka-${KAFKA_CONNECTOR_VERSION}.jar
 RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/flink/flink-json/${FLINK_VERSION}/flink-json-${FLINK_VERSION}.jar
 
-# Iceberg runtime for Flink 2.0 (covers Flink 2.x)
-RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/iceberg/iceberg-flink-runtime-2.0/${ICEBERG_VERSION}/iceberg-flink-runtime-2.0-${ICEBERG_VERSION}.jar
+# Iceberg runtime for Flink 2.3
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/iceberg/iceberg-flink-runtime-2.3/${ICEBERG_VERSION}/iceberg-flink-runtime-2.3-${ICEBERG_VERSION}.jar
 
 # Iceberg AWS bundle (includes iceberg-aws + full AWS SDK v2, shaded)
 RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar
@@ -28,12 +28,12 @@ RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/h
 RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/hadoop/hadoop-hdfs-client/3.3.6/hadoop-hdfs-client-3.3.6.jar
 
 # Caffeine cache (required by Iceberg REST catalog)
-RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/com/github/ben-manes/caffeine/caffeine/3.2.3/caffeine-3.2.3.jar
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/com/github/ben-manes/caffeine/caffeine/3.3.1/caffeine-3.3.1.jar
 
 # HTTP client (for REST catalog communication)
-RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.2.1/httpclient5-5.2.1.jar
-RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5/5.2.1/httpcore5-5.2.1.jar
-RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-h2/5.2.1/httpcore5-h2-5.2.1.jar
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/httpcomponents/client5/httpclient5/5.6.5/httpclient5-5.6.5.jar
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5/5.4.4/httpcore5-5.4.4.jar
+RUN wget -q -P /opt/flink/lib/ https://repo.maven.apache.org/maven2/org/apache/httpcomponents/core5/httpcore5-h2/5.4.4/httpcore5-h2-5.4.4.jar
 
 RUN chown -R flink:flink /opt/flink/lib
 USER flink

@@ -89,7 +89,7 @@ An end-to-end streaming data pipeline demonstrating real-time data processing wi
 |TR1.3 |Proper networking between containers |Done (pipeline-network)
 |TR1.4 |Health checks for critical services |Done (Kafka, SeaweedFS, Flink)
 |TR2.1 |Makefile automation (`make demo` for full setup) |Done
-|TR2.2 |Smoke tests for Flink jobs |Done (9 JUnit 5 tests)
+|TR2.2 |Smoke tests for Flink jobs |Done (9 JUnit tests)
 |TR2.3 |CI pipeline (GitHub Actions) |Done (build + infra smoke test)
 |TR2.4 |Automated dependency updates (Dependabot) |Done
 |TR3.1 |Architecture diagrams (D2) |Done (3 diagrams)

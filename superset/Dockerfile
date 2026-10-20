@@ -1,17 +1,9 @@
-FROM apache/superset:4.1.1
+FROM apache/superset:6.1.0
 
-# Install system dependencies required for building Python packages
+# Superset 5+ images run from a uv-managed venv at /app/.venv without pip;
+# install the Trino driver (includes the SQLAlchemy dialect) into it
 USER root
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libssl-dev \
-    libffi-dev \
-    python3-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Trino driver and SQLAlchemy dialect
-RUN pip install trino sqlalchemy-trino
+RUN uv pip install --python /app/.venv/bin/python --no-cache trino
 
 # Copy the initialization script and dashboard export
 COPY init_superset.sh /app/init_superset.sh

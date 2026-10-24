@@ -1,4 +1,4 @@
-FROM apache/superset:6.1.0
+FROM apache/superset:6.1.0@sha256:16b50bbef6648912a79e3293d418fefa743ce555d36c5af6b85d859119ed7f88
 
 # Superset 5+ images run from a uv-managed venv at /app/.venv without pip;
 # install the Trino driver (includes the SQLAlchemy dialect) into it

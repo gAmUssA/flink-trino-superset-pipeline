@@ -43,7 +43,7 @@ dependencies {
 
     // Logging
     implementation("org.slf4j:slf4j-api:2.0.20")
-    implementation("ch.qos.logback:logback-classic:1.6.5")
+    implementation("ch.qos.logback:logback-classic:1.6.6")
 
     // Caffeine cache (required by Iceberg REST catalog)
     implementation("com.github.ben-manes.caffeine:caffeine:3.3.1")

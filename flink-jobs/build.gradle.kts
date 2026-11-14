@@ -49,8 +49,8 @@ dependencies {
     implementation("com.github.ben-manes.caffeine:caffeine:3.3.1")
 
     // Jackson for JSON processing
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.22.4")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.22.4")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.23.0")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.23.0")
 
     // Test
     testImplementation("org.junit.jupiter:junit-jupiter:6.1.3")
